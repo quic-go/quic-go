@@ -94,7 +94,7 @@ func TestStartedConnection(t *testing.T) {
 		Remote: remoteInfo,
 	})
 
-	require.Equal(t, "transport:connection_started", name)
+	require.Equal(t, "quic:connection_started", name)
 	require.JSONEq(t, `{
 		"local": {"address_v4": {"ip": "192.168.13.37", "port": 42}},
 		"remote": {"address_v6": {"ip": "2001:db8::1", "port": 24}}
@@ -108,7 +108,7 @@ func TestTupleAssigned(t *testing.T) {
 		Remote:  TupleEndpointInfo{IPv6: netip.MustParseAddrPort("[2001:db8::1]:24")},
 	})
 
-	require.Equal(t, "transport:tuple_assigned", name)
+	require.Equal(t, "quic:tuple_assigned", name)
 	require.JSONEq(t, `{
 		"tuple_id": "1",
 		"tuple_local": {"address_v4": {"ip": "192.168.13.37", "port": 42}},
@@ -119,7 +119,7 @@ func TestTupleAssigned(t *testing.T) {
 func TestVersionInformation(t *testing.T) {
 	name, ev := testEventEncoding(t, &VersionInformation{ChosenVersion: 0x1337})
 
-	require.Equal(t, "transport:version_information", name)
+	require.Equal(t, "quic:version_information", name)
 	require.JSONEq(t, `{"chosen_version": "1337"}`, ev)
 }
 
@@ -130,7 +130,7 @@ func TestVersionInformationWithNegotiation(t *testing.T) {
 		ServerVersions: []Version{4, 5, 6},
 	})
 
-	require.Equal(t, "transport:version_information", name)
+	require.Equal(t, "quic:version_information", name)
 	require.JSONEq(t, `{
 		"chosen_version": "1337",
 		"client_versions": ["1", "2", "3"],
@@ -145,7 +145,7 @@ func TestStreamPriorityUpdated(t *testing.T) {
 		Incremental: true,
 	})
 
-	require.Equal(t, "transport:priority_updated", name)
+	require.Equal(t, "quic:priority_updated", name)
 	require.JSONEq(t, `{
 		"stream_id": 42,
 		"new": "u=2, i"
@@ -158,7 +158,7 @@ func TestIdleTimeouts(t *testing.T) {
 		Trigger:   ConnectionCloseTriggerIdleTimeout,
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"trigger": "idle_timeout"
@@ -171,7 +171,7 @@ func TestReceivedStatelessResetPacket(t *testing.T) {
 		Trigger:   ConnectionCloseTriggerStatelessReset,
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.JSONEq(t, `{
 		"initiator": "remote",
 		"trigger": "stateless_reset"
@@ -184,7 +184,7 @@ func TestVersionNegotiationFailure(t *testing.T) {
 		Trigger:   ConnectionCloseTriggerVersionMismatch,
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"trigger": "version_mismatch"
@@ -198,7 +198,7 @@ func TestApplicationErrors(t *testing.T) {
 		Reason:           "foobar",
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.JSONEq(t, `{
 		"initiator": "remote",
 		"application_error": "unknown",
@@ -239,7 +239,7 @@ func TestTransportErrors(t *testing.T) {
 				Reason:          "foobar",
 			})
 
-			require.Equal(t, "transport:connection_closed", name)
+			require.Equal(t, "quic:connection_closed", name)
 			require.JSONEq(t, fmt.Sprintf(`{
 				"initiator": "local",
 				"connection_error": %q,
@@ -256,7 +256,7 @@ func TestTransportCryptoError(t *testing.T) {
 		Reason:          "foobar",
 	})
 
-	require.Equal(t, "transport:connection_closed", name)
+	require.Equal(t, "quic:connection_closed", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"connection_error": "crypto_error_0x12a",
@@ -289,7 +289,7 @@ func TestSentTransportParameters(t *testing.T) {
 		EnableResetStreamAt:             true,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"original_destination_connection_id": "deadc0de",
@@ -320,7 +320,7 @@ func TestServerTransportParametersWithoutStatelessResetToken(t *testing.T) {
 		ActiveConnectionIDLimit:         7,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"original_destination_connection_id": "deadc0de",
@@ -339,7 +339,7 @@ func TestTransportParametersWithoutRetrySourceConnectionID(t *testing.T) {
 		StatelessResetToken: &protocol.StatelessResetToken{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00},
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"original_destination_connection_id": "",
@@ -382,7 +382,7 @@ func testTransportParametersWithPreferredAddress(t *testing.T, hasIPv4, hasIPv6 
 		PreferredAddress: preferredAddress,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	var addresses string
 	if hasIPv4 {
 		addresses += `"address_v4": {"ip": "12.34.56.78", "port": 123},`
@@ -412,7 +412,7 @@ func TestTransportParametersWithDatagramExtension(t *testing.T) {
 		MaxDatagramFrameSize: 1337,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "local",
 		"original_destination_connection_id": "",
@@ -429,7 +429,7 @@ func TestReceivedTransportParameters(t *testing.T) {
 		SentBy:    protocol.PerspectiveClient,
 	})
 
-	require.Equal(t, "transport:parameters_set", name)
+	require.Equal(t, "quic:parameters_set", name)
 	require.JSONEq(t, `{
 		"initiator": "remote",
 		"initial_source_connection_id": "",
@@ -447,7 +447,7 @@ func TestRestoredTransportParameters(t *testing.T) {
 		InitialMaxData:                 400,
 	})
 
-	require.Equal(t, "transport:parameters_restored", name)
+	require.Equal(t, "quic:parameters_restored", name)
 	require.JSONEq(t, `{
 		"initial_max_data": 400,
 		"initial_max_stream_data_bidi_local": 100,
@@ -474,7 +474,7 @@ func TestPacketSent(t *testing.T) {
 		ECN: ECNCE,
 	})
 
-	require.Equal(t, "transport:packet_sent", name)
+	require.Equal(t, "quic:packet_sent", name)
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "handshake",
@@ -519,7 +519,7 @@ func testPacketSent1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloadChe
 		DatagramPayloadChecksum: datagramPayloadChecksum,
 	})
 
-	require.Equal(t, "transport:packet_sent", name)
+	require.Equal(t, "quic:packet_sent", name)
 	var checksum string
 	if datagramPayloadChecksum != 0 {
 		checksum = fmt.Sprintf(`"datagram_payload_checksum": %d,`, datagramPayloadChecksum)
@@ -554,7 +554,7 @@ func TestPacketReceived(t *testing.T) {
 		DatagramPayloadChecksum: 42,
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "initial",
@@ -601,7 +601,7 @@ func testPacketReceived1RTT(t *testing.T, datagramPayloadChecksum DatagramPayloa
 		DatagramPayloadChecksum: datagramPayloadChecksum,
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	var checksum string
 	if datagramPayloadChecksum != 0 {
 		checksum = fmt.Sprintf(`"datagram_payload_checksum": %d,`, datagramPayloadChecksum)
@@ -635,7 +635,7 @@ func TestPacketReceivedRetry(t *testing.T) {
 		Raw: RawInfo{Length: 123, PayloadLength: OmitLength},
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "retry",
@@ -657,7 +657,7 @@ func TestVersionNegotiationReceived(t *testing.T) {
 		SupportedVersions: []Version{0xdeadbeef, 0xdecafbad},
 	})
 
-	require.Equal(t, "transport:packet_received", name)
+	require.Equal(t, "quic:packet_received", name)
 	require.JSONEq(t, `{
 		"header": {
 			"packet_type": "version_negotiation",
@@ -680,7 +680,7 @@ func TestPacketBuffered(t *testing.T) {
 		DatagramPayloadChecksum: 42,
 	})
 
-	require.Equal(t, "transport:packet_buffered", name)
+	require.Equal(t, "quic:packet_buffered", name)
 	require.JSONEq(t, `{
 		"header": {"packet_type": "handshake", "scid": "04030201", "dcid": "0102030405060708"},
 		"raw": {"length": 1337},
@@ -697,7 +697,7 @@ func TestPacketDropped(t *testing.T) {
 		Trigger:                 PacketDropPayloadDecryptError,
 	})
 
-	require.Equal(t, "transport:packet_dropped", name)
+	require.Equal(t, "quic:packet_dropped", name)
 	require.JSONEq(t, `{
 		"header": {"packet_type": "retry"},
 		"raw": {"length": 1337},
@@ -779,7 +779,7 @@ func TestMetricsUpdated(t *testing.T) {
 		PacketsInFlight:  42,
 	})
 
-	require.Equal(t, "recovery:metrics_updated", name)
+	require.Equal(t, "quic:recovery_metrics_updated", name)
 	var ev map[string]any
 	require.NoError(t, json.Unmarshal([]byte(data), &ev))
 	require.Equal(t, float64(15), ev["min_rtt"])
@@ -807,7 +807,7 @@ func TestPacketLost(t *testing.T) {
 		Trigger: PacketLossReorderingThreshold,
 	})
 
-	require.Equal(t, "recovery:packet_lost", name)
+	require.Equal(t, "quic:packet_lost", name)
 	require.JSONEq(t, `{
 		"header": {"packet_type": "handshake", "packet_number": 42},
 		"trigger": "reordering_threshold"
@@ -851,7 +851,7 @@ func TestSpuriousLoss(t *testing.T) {
 		TimeReordering:   1337 * time.Millisecond,
 	})
 
-	require.Equal(t, "recovery:spurious_loss", name)
+	require.Equal(t, "quic:spurious_loss", name)
 	var ev map[string]any
 	require.NoError(t, json.Unmarshal([]byte(data), &ev))
 	require.Contains(t, ev, "packet_number")
@@ -868,7 +868,7 @@ func TestMTUUpdated(t *testing.T) {
 		Done:  true,
 	})
 
-	require.Equal(t, "recovery:mtu_updated", name)
+	require.Equal(t, "quic:mtu_updated", name)
 	require.JSONEq(t, `{
 		"new": 1337,
 		"done": true
@@ -887,14 +887,14 @@ func TestCongestionStateUpdated(t *testing.T) {
 		State: CongestionStateCongestionAvoidance,
 	})
 
-	require.Equal(t, "recovery:congestion_state_updated", name)
+	require.Equal(t, "quic:congestion_state_updated", name)
 	require.JSONEq(t, `{"new": "congestion_avoidance"}`, ev)
 }
 
 func TestPTOCountUpdated(t *testing.T) {
 	name, ev := testEventEncoding(t, &PTOCountUpdated{PTOCount: 42})
 
-	require.Equal(t, "recovery:metrics_updated", name)
+	require.Equal(t, "quic:recovery_metrics_updated", name)
 	require.JSONEq(t, `{"pto_count": 42}`, ev)
 }
 
@@ -905,7 +905,7 @@ func TestKeyUpdatedTLS(t *testing.T) {
 		KeyPhase: 0,
 	})
 
-	require.Equal(t, "security:key_updated", name)
+	require.Equal(t, "quic:key_updated", name)
 	require.JSONEq(t, `{
 		"key_type": "client_handshake_secret",
 		"trigger": "tls"
@@ -919,7 +919,7 @@ func TestKeyUpdatedTLS1RTT(t *testing.T) {
 		KeyPhase: 0,
 	})
 
-	require.Equal(t, "security:key_updated", name)
+	require.Equal(t, "quic:key_updated", name)
 	require.JSONEq(t, `{
 		"key_type": "server_1rtt_secret",
 		"trigger": "tls",
@@ -934,7 +934,7 @@ func TestKeyUpdated(t *testing.T) {
 		KeyPhase: 1337,
 	})
 
-	require.Equal(t, "security:key_updated", name)
+	require.Equal(t, "quic:key_updated", name)
 	require.JSONEq(t, `{
 		"key_type": "client_1rtt_secret",
 		"trigger": "remote_update",
@@ -948,7 +948,7 @@ func TestKeyDiscarded0RTT(t *testing.T) {
 		KeyPhase: 0,
 	})
 
-	require.Equal(t, "security:key_discarded", name)
+	require.Equal(t, "quic:key_discarded", name)
 	require.JSONEq(t, `{
 		"key_type": "server_0rtt_secret",
 		"trigger": "tls"
@@ -961,7 +961,7 @@ func TestKeyDiscarded(t *testing.T) {
 		KeyPhase: 42,
 	})
 
-	require.Equal(t, "security:key_discarded", name)
+	require.Equal(t, "quic:key_discarded", name)
 	require.JSONEq(t, `{
 		"key_type": "client_1rtt_secret",
 		"key_phase": 42
@@ -991,7 +991,7 @@ func TestTimerUpdated(t *testing.T) {
 		producer.Close()
 
 		name, ev := decode(t, buf.String())
-		require.Equal(t, "recovery:loss_timer_updated", name)
+		require.Equal(t, "quic:timer_updated", name)
 		require.JSONEq(t, `{
 			"event_type": "set",
 			"timer_type": "pto",
@@ -1008,7 +1008,7 @@ func TestTimerUpdatedExpired(t *testing.T) {
 		EncLevel:  protocol.Encryption1RTT,
 	})
 
-	require.Equal(t, "recovery:loss_timer_updated", name)
+	require.Equal(t, "quic:timer_updated", name)
 	require.JSONEq(t, `{
 		"event_type": "expired",
 		"timer_type": "ack",
@@ -1019,7 +1019,7 @@ func TestTimerUpdatedExpired(t *testing.T) {
 func TestTimerUpdatedCanceled(t *testing.T) {
 	name, ev := testEventEncoding(t, &TimerUpdated{Type: TimerEventTypeCancelled})
 
-	require.Equal(t, "recovery:loss_timer_updated", name)
+	require.Equal(t, "quic:timer_updated", name)
 	require.JSONEq(t, `{"event_type": "cancelled"}`, ev)
 }
 
@@ -1029,7 +1029,7 @@ func TestECNStateUpdated(t *testing.T) {
 		Trigger: "",
 	})
 
-	require.Equal(t, "recovery:ecn_state_updated", name)
+	require.Equal(t, "quic:ecn_state_updated", name)
 	require.JSONEq(t, `{"new": "unknown"}`, ev)
 }
 
@@ -1039,7 +1039,7 @@ func TestECNStateUpdatedWithTrigger(t *testing.T) {
 		Trigger: "ACK doesn't contain ECN marks",
 	})
 
-	require.Equal(t, "recovery:ecn_state_updated", name)
+	require.Equal(t, "quic:ecn_state_updated", name)
 	require.JSONEq(t, `{
 		"new": "failed",
 		"trigger": "ACK doesn't contain ECN marks"
@@ -1051,7 +1051,7 @@ func TestALPNInformation(t *testing.T) {
 		ChosenALPN: "h3",
 	})
 
-	require.Equal(t, "transport:alpn_information", name)
+	require.Equal(t, "quic:alpn_information", name)
 	require.JSONEq(t, `{"chosen_alpn": {"string_value": "h3"}}`, ev)
 	_, ev = testEventEncoding(t, ALPNInformation{ChosenALPN: "\xff"})
 	require.JSONEq(t, `{"chosen_alpn": {"byte_value": "ff"}}`, ev)
@@ -1060,13 +1060,13 @@ func TestALPNInformation(t *testing.T) {
 func TestDebugEvent(t *testing.T) {
 	t.Run("default name", func(t *testing.T) {
 		name, ev := testEventEncoding(t, &DebugEvent{Message: "hello world"})
-		require.Equal(t, "transport:debug", name)
+		require.Equal(t, "quic:debug", name)
 		require.JSONEq(t, `{"message": "hello world"}`, ev)
 	})
 
 	t.Run("custom name", func(t *testing.T) {
 		name, ev := testEventEncoding(t, &DebugEvent{EventName: "foo", Message: "bar"})
-		require.Equal(t, "transport:foo", name)
+		require.Equal(t, "quic:foo", name)
 		require.JSONEq(t, `{"message": "bar"}`, ev)
 	})
 }
