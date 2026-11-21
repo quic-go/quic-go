@@ -1,11 +1,28 @@
 package handshake
 
 import (
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestTokenProtectorKeyDerivation(t *testing.T) {
+	var key TokenProtectorKey
+	rand.Read(key[:])
+	salt := make([]byte, tokenSaltSize)
+	rand.Read(salt)
+
+	prk, err := hkdf.Extract(sha256.New, key[:], salt)
+	require.NoError(t, err)
+	expected, err := hkdf.Expand(sha256.New, prk, tokenProtectorHKDFInfo, 32)
+	require.NoError(t, err)
+	derived, err := newTokenProtector(key).deriveKey(salt)
+	require.NoError(t, err)
+	require.Equal(t, expected, derived[:])
+}
 
 func TestTokenProtectorEncodeAndDecode(t *testing.T) {
 	var key TokenProtectorKey
