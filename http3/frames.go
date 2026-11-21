@@ -51,13 +51,16 @@ type frameParser struct {
 }
 
 // Read reads the payload of the current frame.
-// It returns io.EOF at the end of the payload.
+// It returns io.EOF at the end of the payload, and io.ErrUnexpectedEOF if the stream ends before.
 func (p *frameParser) Read(b []byte) (int, error) {
 	if p.remaining == 0 {
 		return 0, io.EOF
 	}
 	n, err := p.r.Read(b[:min(uint64(len(b)), p.remaining)])
 	p.remaining -= uint64(n)
+	if errors.Is(err, io.EOF) && p.remaining > 0 {
+		return n, p.truncated()
+	}
 	return n, err
 }
 
@@ -66,16 +69,30 @@ func (p *frameParser) HasMoreData() bool {
 	return p.isData && p.remaining > 0
 }
 
+// truncated closes the connection: when a stream terminates cleanly inside a frame,
+// the receiver must close the connection with H3_FRAME_ERROR (RFC 9114, Section 7.1).
+func (p *frameParser) truncated() error {
+	p.closeConn(quic.ApplicationErrorCode(ErrCodeFrameError), "")
+	return io.ErrUnexpectedEOF
+}
+
 func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 	p.isData = false
 	r := &countingByteReader{Reader: quicvarint.NewReader(p.r)}
 	for {
 		t, err := quicvarint.Read(r)
 		if err != nil {
+			// the stream may only end between two frames
+			if errors.Is(err, io.EOF) && r.NumRead > 0 {
+				return nil, p.truncated()
+			}
 			return nil, err
 		}
 		l, err := quicvarint.Read(r)
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, p.truncated()
+			}
 			return nil, err
 		}
 		p.remaining = l
@@ -208,9 +225,6 @@ func parseSettingsFrame(r io.Reader, l uint64, headerLen int, streamID quic.Stre
 	}
 	buf := make([]byte, l)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, io.EOF
-		}
 		return nil, err
 	}
 	frame := &settingsFrame{MaxFieldSectionSize: -1}
@@ -363,9 +377,6 @@ func parsePriorityUpdateFrame(r io.Reader, l uint64, headerLen int, streamID qui
 	}
 	buf := make([]byte, l)
 	if _, err := io.ReadFull(r, buf); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, io.EOF
-		}
 		return nil, err
 	}
 	id, n, err := quicvarint.Parse(buf)
