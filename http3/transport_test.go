@@ -214,6 +214,20 @@ func TestTransportMultipleQUICVersions(t *testing.T) {
 	require.EqualError(t, err, "can only use a single QUIC version for dialing a HTTP/3 connection")
 }
 
+func TestTransportDoesNotModifyQUICConfig(t *testing.T) {
+	qconf := &quic.Config{Versions: []quic.Version{quic.Version1}}
+	tr := &Transport{
+		QUICConfig: qconf,
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (*quic.Conn, error) {
+			return nil, assert.AnError
+		},
+	}
+	_, err := tr.RoundTrip(httptest.NewRequest(http.MethodGet, "https://example.com", nil))
+	require.ErrorIs(t, err, assert.AnError)
+	require.Zero(t, qconf.MaxIncomingStreams)
+	require.Equal(t, int64(-1), tr.QUICConfig.MaxIncomingStreams)
+}
+
 func TestTransportConnectionReuse(t *testing.T) {
 	conn, _ := newConnPair(t)
 	mockCtrl := gomock.NewController(t)
