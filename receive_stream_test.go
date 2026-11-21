@@ -590,54 +590,39 @@ func TestReceiveStreamFinalSizeCallbackRemoved(t *testing.T) {
 	require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Fin: true}, monotime.Now()))
 }
 
+type streamReadFunc func(*ReceiveStream, []byte) (int, error)
+
+func testReadAndPeek(t *testing.T, test func(*testing.T, streamReadFunc)) {
+	t.Helper()
+	t.Run("Read", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) { test(t, (*ReceiveStream).Read) })
+	})
+	t.Run("Peek", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) { test(t, (*ReceiveStream).Peek) })
+	})
+}
+
 func TestReceiveStreamCloseForShutdown(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
+	testReadAndPeek(t, func(t *testing.T, read streamReadFunc) {
 		mockCtrl := gomock.NewController(t)
 		mockFC := newTestStreamFlowController(42)
 		mockSender := NewMockStreamSender(mockCtrl)
 		str := newReceiveStream(42, mockSender, mockFC)
 		strWithTimeout := &readerWithTimeout{Reader: str, Timeout: time.Minute}
 
-		// Test immediate return of reads
-		readErrChan := make(chan error, 1)
-		peekErrChan := make(chan error, 1)
+		errChan := make(chan error, 1)
 		go func() {
-			_, err := strWithTimeout.Read([]byte{0})
-			readErrChan <- err
+			_, err := read(str, []byte{0})
+			errChan <- err
 		}()
-		go func() {
-			_, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Minute}).Peek([]byte{0})
-			peekErrChan <- err
-		}()
-
 		synctest.Wait()
-
-		select {
-		case err := <-readErrChan:
-			t.Fatalf("read returned before closeForShutdown: %v", err)
-		case err := <-peekErrChan:
-			t.Fatalf("peek returned before closeForShutdown: %v", err)
-		default:
-		}
+		require.Empty(t, errChan)
 
 		str.closeForShutdown(assert.AnError)
-		synctest.Wait()
+		require.ErrorIs(t, <-errChan, assert.AnError)
 
 		require.NoError(t, str.handleStreamFrame(&wire.StreamFrame{Fin: true}, monotime.Now()))
 		str.SetReceiveFinalSizeCallback(func(int64) { t.Fatal("callback called") })
-
-		select {
-		case err := <-readErrChan:
-			require.ErrorIs(t, err, assert.AnError)
-		default:
-			t.Fatal("read should have returned")
-		}
-		select {
-		case err := <-peekErrChan:
-			require.ErrorIs(t, err, assert.AnError)
-		default:
-			t.Fatal("peek should have returned")
-		}
 
 		// following calls to Peek should return the error
 		n, err := (&peekerWithTimeout{Peeker: str, Timeout: time.Minute}).Peek([]byte{0})
@@ -664,7 +649,7 @@ func TestReceiveStreamCloseForShutdown(t *testing.T) {
 }
 
 func TestReceiveStreamCancellation(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
+	testReadAndPeek(t, func(t *testing.T, read streamReadFunc) {
 		mockCtrl := gomock.NewController(t)
 		mockFC := newTestStreamFlowController(42)
 		mockSender := NewMockStreamSender(mockCtrl)
@@ -672,17 +657,11 @@ func TestReceiveStreamCancellation(t *testing.T) {
 		strWithTimeout := &readerWithTimeout{Reader: str, Timeout: 2 * time.Second}
 
 		mockSender.EXPECT().onHasStreamControlFrame(str.StreamID(), gomock.Any())
-		readErrChan := make(chan error, 1)
-		peekErrChan := make(chan error, 1)
+		errChan := make(chan error, 1)
 		go func() {
-			_, err := strWithTimeout.Read([]byte{0})
-			readErrChan <- err
+			_, err := read(str, []byte{0})
+			errChan <- err
 		}()
-		go func() {
-			_, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
-			peekErrChan <- err
-		}()
-
 		synctest.Wait()
 
 		str.CancelRead(1234)
@@ -693,20 +672,7 @@ func TestReceiveStreamCancellation(t *testing.T) {
 		require.False(t, hasMore)
 		require.True(t, mockCtrl.Satisfied())
 
-		synctest.Wait()
-
-		select {
-		case err := <-readErrChan:
-			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
-		default:
-			t.Fatal("Read was not unblocked")
-		}
-		select {
-		case err := <-peekErrChan:
-			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
-		default:
-			t.Fatal("Peek was not unblocked")
-		}
+		require.ErrorIs(t, <-errChan, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: false})
 
 		// further calls to Peek return the error
 		n, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
@@ -857,24 +823,18 @@ func TestReceiveStreamResetAbandonsUnreadData(t *testing.T) {
 }
 
 func TestReceiveStreamReset(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
+	testReadAndPeek(t, func(t *testing.T, read streamReadFunc) {
 		mockCtrl := gomock.NewController(t)
 		mockFC := newTestStreamFlowController(42)
 		mockSender := NewMockStreamSender(mockCtrl)
 		str := newReceiveStream(42, mockSender, mockFC)
 		strWithTimeout := &readerWithTimeout{Reader: str, Timeout: 2 * time.Second}
 
-		readErrChan := make(chan error, 1)
-		peekErrChan := make(chan error, 1)
+		errChan := make(chan error, 1)
 		go func() {
-			_, err := strWithTimeout.Read([]byte{0})
-			readErrChan <- err
+			_, err := read(str, []byte{0})
+			errChan <- err
 		}()
-		go func() {
-			_, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
-			peekErrChan <- err
-		}()
-
 		synctest.Wait()
 
 		mockSender.EXPECT().onStreamCompleted(protocol.StreamID(42))
@@ -883,20 +843,7 @@ func TestReceiveStreamReset(t *testing.T) {
 			monotime.Now(),
 		))
 
-		synctest.Wait()
-
-		select {
-		case err := <-readErrChan:
-			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
-		default:
-			t.Fatal("Read was not unblocked")
-		}
-		select {
-		case err := <-peekErrChan:
-			require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
-		default:
-			t.Fatal("Peek was not unblocked")
-		}
+		require.ErrorIs(t, <-errChan, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
 
 		// further calls to Peek return the error
 		n, err := (&peekerWithTimeout{Peeker: str, Timeout: 2 * time.Second}).Peek([]byte{0})
