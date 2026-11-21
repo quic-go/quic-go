@@ -345,7 +345,7 @@ func (c *rawConn) WaitForExtendedConnect(ctx context.Context) error {
 	case <-connCtx.Done():
 		return context.Cause(connCtx)
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	}
 	if !c.settings.EnableExtendedConnect {
 		return errors.New("http3: server didn't enable Extended CONNECT")

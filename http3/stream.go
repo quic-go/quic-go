@@ -425,7 +425,8 @@ func (s *RequestStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 // SendRequestHeader sends the HTTP request.
 //
 // It can only be used for requests that don't have a request body.
-// For Extended CONNECT requests, it blocks until the server's SETTINGS were received.
+// For Extended CONNECT requests, it blocks until the server's SETTINGS were received,
+// or until [RequestStream.Context] is canceled.
 // It is invalid to call it more than once.
 func (s *RequestStream) SendRequestHeader(req *http.Request) error {
 	if !s.str.addQlogProducer() {
@@ -446,7 +447,7 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	}
 	// RFC 8441, Section 3 allows Extended CONNECT only once the server's SETTINGS enabled it.
 	if isExtendedConnectRequest(req) {
-		if err := s.conn.WaitForExtendedConnect(req.Context()); err != nil {
+		if err := s.conn.WaitForExtendedConnect(s.str.Context()); err != nil {
 			return maybeReplaceError(err)
 		}
 	}
