@@ -278,6 +278,15 @@ func TestConnectionServerInvalidFrames(t *testing.T) {
 	}
 }
 
+func TestConnectionClientTokenStoreKey(t *testing.T) {
+	ts := NewLRUTokenStore(1, 1)
+	tc := newClientTestConnection(t, nil, &Config{TokenStore: ts}, false)
+	_, err := tc.conn.handleFrame(&wire.NewTokenFrame{Token: []byte("foobar")}, protocol.Encryption1RTT, protocol.ConnectionID{}, monotime.Now())
+	require.NoError(t, err)
+	// tokens are stored per QUIC version
+	require.NotNil(t, ts.Pop("quic-go.net|1"))
+}
+
 func TestConnectionClose(t *testing.T) {
 	t.Run("transport error", func(t *testing.T) {
 		expectedErr := &qerr.TransportError{

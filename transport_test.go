@@ -648,6 +648,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		pn                   protocol.PacketNumber
 		hasNegotiatedVersion bool
 		version              protocol.Version
+		tlsConf              *tls.Config
 	}
 
 	connChan := make(chan connParams, 2)
@@ -661,7 +662,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		_ ConnectionIDGenerator,
 		_ *statelessResetter,
 		_ *Config,
-		_ *tls.Config,
+		tlsConf *tls.Config,
 		pn protocol.PacketNumber,
 		_ bool,
 		hasNegotiatedVersion bool,
@@ -669,7 +670,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		_ utils.Logger,
 		v protocol.Version,
 	) *wrappedConn {
-		connChan <- connParams{pn: pn, hasNegotiatedVersion: hasNegotiatedVersion, version: v}
+		connChan <- connParams{pn: pn, hasNegotiatedVersion: hasNegotiatedVersion, version: v, tlsConf: tlsConf}
 		if counter == 0 {
 			counter++
 			return &wrappedConn{testHooks: conn}
@@ -681,7 +682,8 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 	tr.init(true)
 	defer tr.Close()
 
-	_, err := tr.Dial(context.Background(), nil, &tls.Config{}, nil)
+	csc := tls.NewLRUClientSessionCache(2)
+	_, err := tr.Dial(context.Background(), nil, &tls.Config{ClientSessionCache: csc}, nil)
 	require.ErrorIs(t, err, assert.AnError)
 
 	select {
@@ -689,6 +691,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		require.Zero(t, params.pn)
 		require.False(t, params.hasNegotiatedVersion)
 		require.Equal(t, protocol.Version1, params.version)
+		params.tlsConf.ClientSessionCache.Put("foo", &tls.ClientSessionState{})
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
@@ -697,9 +700,15 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		require.Equal(t, protocol.PacketNumber(109), params.pn)
 		require.True(t, params.hasNegotiatedVersion)
 		require.Equal(t, protocol.Version(789), params.version)
+		params.tlsConf.ClientSessionCache.Put("foo", &tls.ClientSessionState{})
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+	// session tickets are stored per QUIC version
+	_, ok := csc.Get(protocol.VersionedKey("foo", protocol.Version1))
+	require.True(t, ok)
+	_, ok = csc.Get(protocol.VersionedKey("foo", 789))
+	require.True(t, ok)
 }
 
 func TestTransportReplaceWithClosed(t *testing.T) {

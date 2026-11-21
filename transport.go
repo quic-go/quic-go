@@ -268,6 +268,7 @@ func (t *Transport) dial(ctx context.Context, addr net.Addr, host string, tlsCon
 	conf = populateConfig(conf)
 	tlsConf = tlsConf.Clone()
 	setTLSConfigServerName(tlsConf, addr, host)
+	setSessionCacheVersion(tlsConf, conf.Versions[0])
 	return t.doDial(ctx,
 		newSendConn(t.conn, addr, udp.PacketInfo{}, utils.DefaultLogger),
 		tlsConf,
@@ -366,6 +367,9 @@ func (t *Transport) doDial(
 		}
 		return nil, context.Cause(ctx)
 	case params := <-switchVersionChan:
+		// Session tickets are specific to the QUIC version of the connection that provided them.
+		tlsConf = tlsConf.Clone()
+		setSessionCacheVersion(tlsConf, params.nextVersion)
 		return t.doDial(ctx,
 			sendConn,
 			tlsConf,
