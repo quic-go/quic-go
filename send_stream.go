@@ -74,8 +74,11 @@ type SendStream struct {
 
 	priorityValue atomic.Uint64
 
-	writeChan  chan struct{}
-	writeMutex sync.Mutex // serializes writes, including while they wait for flow control
+	writeChan chan struct{}
+	// The stream API allows only one call to Write, WriteWithLimit, or TryWriteAll at a time.
+	// Concurrent calls can cause hard-to-debug failures, so we hold writeMutex
+	// for the entire call, even while waiting for network I/O.
+	writeMutex sync.Mutex
 	deadline   monotime.Time
 
 	flowController *streamFlowController

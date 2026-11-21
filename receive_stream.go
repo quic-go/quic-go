@@ -45,8 +45,11 @@ type ReceiveStream struct {
 	readPos      protocol.ByteCount
 	reliableSize protocol.ByteCount
 
-	readChan  chan struct{}
-	readMutex sync.Mutex // serializes Read and Peek, including while they wait for data
+	readChan chan struct{}
+	// The stream API allows only one call to Read or Peek at a time.
+	// Concurrent calls can cause hard-to-debug failures, so we hold readMutex
+	// for the entire call, even while waiting for data from the peer.
+	readMutex sync.Mutex
 	deadline  monotime.Time
 
 	flowController *streamFlowController
