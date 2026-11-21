@@ -14,6 +14,7 @@ import (
 	http "net/http"
 	reflect "reflect"
 
+	quic "github.com/quic-go/quic-go"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -115,6 +116,42 @@ func (c *MockClientConnRoundTripCall) Do(f func(*http.Request) (*http.Response, 
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
 func (c *MockClientConnRoundTripCall) DoAndReturn(f func(*http.Request) (*http.Response, error)) *MockClientConnRoundTripCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
+// handleUnidirectionalStream mocks base method.
+func (m *MockClientConn) handleUnidirectionalStream(arg0 *quic.ReceiveStream) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "handleUnidirectionalStream", arg0)
+}
+
+// handleUnidirectionalStream indicates an expected call of handleUnidirectionalStream.
+func (mr *MockClientConnMockRecorder) handleUnidirectionalStream(arg0 any) *MockClientConnhandleUnidirectionalStreamCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "handleUnidirectionalStream", reflect.TypeOf((*MockClientConn)(nil).handleUnidirectionalStream), arg0)
+	return &MockClientConnhandleUnidirectionalStreamCall{Call: call}
+}
+
+// MockClientConnhandleUnidirectionalStreamCall wrap *gomock.Call
+type MockClientConnhandleUnidirectionalStreamCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockClientConnhandleUnidirectionalStreamCall) Return() *MockClientConnhandleUnidirectionalStreamCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockClientConnhandleUnidirectionalStreamCall) Do(f func(*quic.ReceiveStream)) *MockClientConnhandleUnidirectionalStreamCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockClientConnhandleUnidirectionalStreamCall) DoAndReturn(f func(*quic.ReceiveStream)) *MockClientConnhandleUnidirectionalStreamCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

@@ -40,6 +40,7 @@ type RoundTripOpt struct {
 type clientConn interface {
 	OpenRequestStream(context.Context) (*RequestStream, error)
 	RoundTrip(*http.Request) (*http.Response, error)
+	handleUnidirectionalStream(*quic.ReceiveStream)
 }
 
 type roundTripperWithCount struct {
@@ -69,6 +70,8 @@ type Transport struct {
 
 	// QUICConfig is the [quic.Config] used for dialing new connections.
 	// If nil, reasonable default values will be used.
+	// [quic.Config.MaxIncomingStreams] defaults to -1, so the server can't open
+	// bidirectional streams (see [Transport.NewClientConn]).
 	QUICConfig *quic.Config
 
 	// Dial specifies an optional dial function for creating QUIC
@@ -127,7 +130,16 @@ var (
 
 func (t *Transport) init() error {
 	if t.newClientConn == nil {
-		t.newClientConn = func(conn *quic.Conn) clientConn { return t.NewClientConn(conn) }
+		t.newClientConn = func(conn *quic.Conn) clientConn {
+			return newClientConn(
+				conn,
+				t.EnableDatagrams,
+				t.AdditionalSettings,
+				t.MaxResponseHeaderBytes,
+				t.DisableCompression,
+				t.Logger,
+			)
+		}
 	}
 	if t.QUICConfig == nil {
 		t.QUICConfig = defaultQuicConfig.Clone()
@@ -377,7 +389,17 @@ func (t *Transport) dial(ctx context.Context, hostname string) (*quic.Conn, clie
 	if err != nil {
 		return nil, nil, err
 	}
-	return conn, t.newClientConn(conn), nil
+	clientConn := t.newClientConn(conn)
+	go func() {
+		for {
+			str, err := conn.AcceptUniStream(context.Background())
+			if err != nil {
+				return
+			}
+			go clientConn.handleUnidirectionalStream(str)
+		}
+	}()
+	return conn, clientConn, nil
 }
 
 func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*net.UDPAddr, error) {
@@ -414,6 +436,12 @@ func (t *Transport) removeClient(hostname string) {
 //
 // Obtaining a [ClientConn] is only needed for more advanced use cases, such as
 // using Extended CONNECT for WebTransport or the various MASQUE protocols.
+//
+// RFC 9114, Section 6.1 requires clients to close the connection with H3_STREAM_CREATION_ERROR
+// when the server opens a bidirectional stream, unless an extension allows it. To save a goroutine
+// per connection, the [ClientConn] never accepts these streams. Dial the QUIC connection with a
+// negative [quic.Config.MaxIncomingStreams] to make QUIC close the connection with
+// STREAM_LIMIT_ERROR instead.
 func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 	c := newClientConn(
 		conn,
@@ -430,15 +458,6 @@ func (t *Transport) NewClientConn(conn *quic.Conn) *ClientConn {
 				return
 			}
 			go c.handleUnidirectionalStream(str)
-		}
-	}()
-	go func() {
-		for {
-			str, err := conn.AcceptStream(context.Background())
-			if err != nil {
-				return
-			}
-			c.HandleBidirectionalStream(str)
 		}
 	}()
 	return c
