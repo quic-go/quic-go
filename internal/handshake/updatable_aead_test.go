@@ -220,15 +220,11 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 
 func TestAEADLimitReached(t *testing.T) {
 	client, _, _ := setupEndpoints(t, utils.NewRTTStats())
-	client.invalidPacketLimit = 10
-	for i := range 9 {
-		_, err := client.Open(nil, []byte("foobar"), monotime.Now(), protocol.PacketNumber(i), protocol.KeyPhaseZero, []byte("ad"))
-		require.ErrorIs(t, err, ErrDecryptionFailed)
-	}
-	_, err := client.Open(nil, []byte("foobar"), monotime.Now(), 10, protocol.KeyPhaseZero, []byte("ad"))
-	var transportErr *qerr.TransportError
-	require.ErrorAs(t, err, &transportErr)
-	require.Equal(t, qerr.AEADLimitReached, transportErr.ErrorCode)
+	client.invalidPacketCount = client.suite.IntegrityLimit - 4*protocol.InvalidPacketLimitLongHeader - 2
+	_, err := client.Open(nil, []byte("foobar"), monotime.Now(), 1, protocol.KeyPhaseZero, []byte("ad"))
+	require.ErrorIs(t, err, ErrDecryptionFailed)
+	_, err = client.Open(nil, []byte("foobar"), monotime.Now(), 2, protocol.KeyPhaseZero, []byte("ad"))
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
 }
 
 func TestKeyUpdates(t *testing.T) {
