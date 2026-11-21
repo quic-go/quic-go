@@ -197,6 +197,10 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		req.Trailer = trailers
 		return nil
 	}, qlogger)
+	// Only Extended CONNECT requests can define semantics for HTTP Datagrams.
+	if req.Method != http.MethodConnect || req.Proto == "HTTP/3.0" {
+		hstr.rejectDatagrams()
+	}
 
 	// We only use the client's priority for local scheduling.
 	// A Priority response header is only transmitted so that potential intermediaries can use it,

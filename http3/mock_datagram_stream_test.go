@@ -608,3 +608,39 @@ func (c *MockDatagramStreamWriteCall) DoAndReturn(f func([]byte) (int, error)) *
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// rejectDatagrams mocks base method.
+func (m *MockDatagramStream) rejectDatagrams() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "rejectDatagrams")
+}
+
+// rejectDatagrams indicates an expected call of rejectDatagrams.
+func (mr *MockDatagramStreamMockRecorder) rejectDatagrams() *MockDatagramStreamrejectDatagramsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "rejectDatagrams", reflect.TypeOf((*MockDatagramStream)(nil).rejectDatagrams))
+	return &MockDatagramStreamrejectDatagramsCall{Call: call}
+}
+
+// MockDatagramStreamrejectDatagramsCall wrap *gomock.Call
+type MockDatagramStreamrejectDatagramsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockDatagramStreamrejectDatagramsCall) Return() *MockDatagramStreamrejectDatagramsCall {
+	c.Call = c.Call.Return()
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockDatagramStreamrejectDatagramsCall) Do(f func()) *MockDatagramStreamrejectDatagramsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockDatagramStreamrejectDatagramsCall) DoAndReturn(f func()) *MockDatagramStreamrejectDatagramsCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

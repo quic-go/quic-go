@@ -370,6 +370,7 @@ func TestRequestStream(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 	qstr.EXPECT().Write(gomock.Any()).AnyTimes()
+	qstr.EXPECT().rejectDatagrams()
 	require.NoError(t, str.SendRequestHeader(req))
 	// duplicate calls are not allowed
 	require.EqualError(t, str.SendRequestHeader(req), "http3: invalid duplicate use of RequestStream.SendRequestHeader")
