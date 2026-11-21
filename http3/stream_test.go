@@ -302,14 +302,16 @@ func TestRequestStream(t *testing.T) {
 	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	requestWriter := newRequestWriter()
 	clientConn, _ := newConnPair(t)
+	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil)
 	str := newRequestStream(
 		newStream(
 			qstr,
-			newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
+			conn,
 			&httptrace.ClientTrace{},
 			func(io.Reader, *headersFrame) error { return nil },
 			nil,
 		),
+		conn,
 		requestWriter,
 		make(chan struct{}),
 		qpack.NewDecoder(),
@@ -338,6 +340,13 @@ func TestRequestStream(t *testing.T) {
 		),
 		"http3: invalid use of RequestStream.SendRequestHeader with a request that has a request body",
 	)
+	// Extended CONNECT requests wait for the server's SETTINGS, unless the stream is canceled
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(&quic.StreamError{StreamID: 42, ErrorCode: 1337})
+	qstr.EXPECT().Context().Return(ctx)
+	connectReq := httptest.NewRequest(http.MethodConnect, "https://quic-go.net", nil)
+	connectReq.Proto = "connect"
+	require.ErrorIs(t, str.SendRequestHeader(connectReq), &Error{ErrorCode: 1337})
 
 	req := httptest.NewRequest(http.MethodGet, "https://quic-go.net", nil)
 	qstr.EXPECT().Write(gomock.Any()).AnyTimes()

@@ -185,6 +185,7 @@ func (c *ClientConn) openRequestStream(
 			rsp.Trailer = hdr
 			return nil
 		}, c.qlogger),
+		c.rawConn,
 		requestWriter,
 		reqDone,
 		c.decoder,
@@ -288,20 +289,10 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	// It is only possible to send an Extended CONNECT request once the SETTINGS were received.
-	// See section 3 of RFC 8441.
+	// Don't open a stream for an Extended CONNECT request the server didn't enable.
 	if isExtendedConnectRequest(req) {
-		connCtx := c.conn.Context()
-		// wait for the server's SETTINGS frame to arrive
-		select {
-		case <-c.rawConn.ReceivedSettings():
-		case <-connCtx.Done():
-			return nil, context.Cause(connCtx)
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
-		}
-		if !c.rawConn.Settings().EnableExtendedConnect {
-			return nil, errors.New("http3: server didn't enable Extended CONNECT")
+		if err := c.rawConn.WaitForExtendedConnect(req.Context()); err != nil {
+			return nil, err
 		}
 	}
 

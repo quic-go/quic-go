@@ -336,6 +336,23 @@ func (c *rawConn) ReceivedSettings() <-chan struct{} { return c.receivedSettings
 // It is only valid to call this function after the channel returned by ReceivedSettings was closed.
 func (c *rawConn) Settings() *Settings { return c.settings }
 
+// WaitForExtendedConnect blocks until the peer's SETTINGS were received.
+// It returns an error if the peer didn't enable Extended CONNECT.
+func (c *rawConn) WaitForExtendedConnect(ctx context.Context) error {
+	connCtx := c.conn.Context()
+	select {
+	case <-c.receivedSettings:
+	case <-connCtx.Done():
+		return context.Cause(connCtx)
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+	if !c.settings.EnableExtendedConnect {
+		return errors.New("http3: server didn't enable Extended CONNECT")
+	}
+	return nil
+}
+
 // AddQlogProducer registers a goroutine or call that may produce qlog events.
 // It returns false once the qlogger has been closed.
 func (c *rawConn) AddQlogProducer() bool {
