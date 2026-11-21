@@ -57,7 +57,7 @@ func (s *testRenoSender) AckNPackets(n int) {
 	s.sender.MaybeExitSlowStart()
 	for range n {
 		s.ackedPacketNumber++
-		s.sender.OnPacketAcked(s.ackedPacketNumber, s.bytesInFlight)
+		s.sender.OnPacketAcked(s.ackedPacketNumber, maxDatagramSize, s.bytesInFlight)
 	}
 	s.bytesInFlight -= protocol.ByteCount(n) * maxDatagramSize
 	s.now = s.now.Add(time.Millisecond)
@@ -453,6 +453,26 @@ func TestRenoSender1ConnectionCongestionAvoidanceAtEndOfRecovery(t *testing.T) {
 	require.Equal(t, expectedSendWindow, sender.sender.GetCongestionWindow())
 }
 
+func TestRenoSenderSmallPackets(t *testing.T) {
+	const size = 100
+	sender := newRenoSender(&utils.RTTStats{}, maxDatagramSize, defaultWindowTCP, nil)
+	// slow start increases the window by the acked bytes
+	sender.OnPacketAcked(1, size, defaultWindowTCP)
+	require.Equal(t, defaultWindowTCP+size, sender.GetCongestionWindow())
+
+	// congestion avoidance increases the window by maxDatagramSize per window of acked bytes
+	sender.OnCongestionEvent(2)
+	window := sender.GetCongestionWindow()
+	pn := protocol.PacketNumber(2)
+	for range window / size {
+		pn++
+		sender.OnPacketAcked(pn, size, window)
+	}
+	require.Equal(t, window, sender.GetCongestionWindow())
+	sender.OnPacketAcked(pn+1, size, window)
+	require.Equal(t, window+maxDatagramSize, sender.GetCongestionWindow())
+}
+
 func TestRenoSenderNoPRR(t *testing.T) {
 	sender := newTestRenoSender()
 
@@ -478,7 +498,7 @@ func TestRenoSenderSlowStartsUpToMaximumCongestionWindow(t *testing.T) {
 
 	for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
 		sender.MaybeExitSlowStart()
-		sender.OnPacketAcked(protocol.PacketNumber(i), sender.GetCongestionWindow())
+		sender.OnPacketAcked(protocol.PacketNumber(i), maxDatagramSize, sender.GetCongestionWindow())
 	}
 	require.Equal(t, initialMaxCongestionWindow, sender.GetCongestionWindow())
 }
@@ -499,7 +519,7 @@ func TestRenoSenderSlowStartsPacketSizeIncrease(t *testing.T) {
 	const packetSize = initialMaxDatagramSize + 100
 	sender.SetMaxDatagramSize(packetSize)
 	for i := 1; i < protocol.MaxCongestionWindowPackets; i++ {
-		sender.OnPacketAcked(protocol.PacketNumber(i), sender.GetCongestionWindow())
+		sender.OnPacketAcked(protocol.PacketNumber(i), packetSize, sender.GetCongestionWindow())
 	}
 	const maxCwnd = protocol.MaxCongestionWindowPackets * packetSize
 	require.Greater(t, sender.GetCongestionWindow(), maxCwnd)
