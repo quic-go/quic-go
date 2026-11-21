@@ -142,12 +142,13 @@ func (t *Transport) init() error {
 	if t.QUICConfig == nil {
 		t.QUICConfig = defaultQuicConfig.Clone()
 		t.QUICConfig.EnableDatagrams = t.EnableDatagrams
+	} else {
+		t.QUICConfig = t.QUICConfig.Clone()
 	}
 	if t.EnableDatagrams && !t.QUICConfig.EnableDatagrams {
 		return errors.New("HTTP Datagrams enabled, but QUIC Datagrams disabled")
 	}
 	if len(t.QUICConfig.Versions) == 0 {
-		t.QUICConfig = t.QUICConfig.Clone()
 		t.QUICConfig.Versions = []quic.Version{quic.SupportedVersions()[0]}
 	}
 	if len(t.QUICConfig.Versions) != 1 {
