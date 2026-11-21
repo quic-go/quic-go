@@ -1584,6 +1584,25 @@ func TestSendStreamResetStreamAtCancelBeforeSend(t *testing.T) {
 	str.handleStopSendingFrame(&wire.StopSendingFrame{StreamID: 1337, ErrorCode: 42})
 }
 
+func TestSendStreamResetStreamAtEnabledAfterCancel(t *testing.T) {
+	mockSender := NewMockStreamSender(gomock.NewController(t))
+	str := newSendStream(context.Background(), 1337, mockSender, newTestStreamFlowControllerWithSendWindow(1337, 100), false)
+
+	mockSender.EXPECT().onHasStreamData(protocol.StreamID(1337), str)
+	_, err := str.Write([]byte("foobar"))
+	require.NoError(t, err)
+	str.SetReliableBoundary()
+	mockSender.EXPECT().onHasStreamControlFrame(protocol.StreamID(1337), str)
+	str.CancelWrite(1337)
+	cf, ok, _ := str.getControlFrame(monotime.Now())
+	require.True(t, ok)
+
+	// the server enables RESET_STREAM_AT after 0-RTT
+	str.enableResetStreamAt()
+	mockSender.EXPECT().onStreamCompleted(protocol.StreamID(1337))
+	cf.Handler.OnAcked(cf.Frame)
+}
+
 func TestSendStreamResetStreamAtCancelAfterSend(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	mockFC := newTestStreamFlowControllerWithSendWindow(42, protocol.MaxByteCount)

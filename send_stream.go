@@ -693,6 +693,8 @@ func (s *SendStream) CancelWrite(errorCode StreamErrorCode) {
 		finalSize = max(finalSize, s.nextFrame.Offset+s.nextFrame.DataLen())
 	}
 	if reliableOffset == 0 {
+		// For 0-RTT streams, the server might enable RESET_STREAM_AT later.
+		s.reliableSize = 0
 		s.numOutstandingFrames = 0
 		s.returnFramesToPool()
 	}
