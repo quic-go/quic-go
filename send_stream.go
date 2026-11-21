@@ -465,14 +465,10 @@ func (s *SendStream) popNewStreamFrameForPacket(maxBytes protocol.ByteCount, v p
 func (s *SendStream) maybeGetBlockedFrame() *wire.StreamDataBlockedFrame {
 	// Flow control for a reserved frame was consumed when it was queued. Don't
 	// report the stream blocked while reserved bytes can still be sent.
-	if s.nextFrameReserved {
+	if s.nextFrameReserved || !s.flowController.IsNewlyBlocked() {
 		return nil
 	}
-	isBlocked, offset := s.flowController.IsNewlyBlocked()
-	if !isBlocked {
-		return nil
-	}
-	return &wire.StreamDataBlockedFrame{StreamID: s.streamID, MaximumStreamData: offset}
+	return &wire.StreamDataBlockedFrame{StreamID: s.streamID, MaximumStreamData: s.writeOffset}
 }
 
 // popNewStreamFrame returns a new STREAM frame to send for this stream

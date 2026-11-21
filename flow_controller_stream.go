@@ -160,13 +160,12 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 
 // IsNewlyBlocked says if it is newly blocked by stream flow control.
 // For every offset, it only returns true once.
-// If it is blocked, the offset is returned.
-func (c *streamFlowController) IsNewlyBlocked() (bool, protocol.ByteCount) {
+func (c *streamFlowController) IsNewlyBlocked() bool {
 	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
-		return false, 0
+		return false
 	}
 	c.lastBlockedAt = c.sendWindow
-	return true, c.sendWindow
+	return true
 }
 
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {
