@@ -3,6 +3,7 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
@@ -40,6 +41,10 @@ type updatableAEAD struct {
 	largestAcked       protocol.PacketNumber
 	firstPacketNumber  protocol.PacketNumber
 	handshakeConfirmed bool
+
+	// packets that failed authentication with any key
+	invalidPacketCount uint64
+	invalidPacketLimit uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
 	prevRcvAEADExpiry monotime.Time
@@ -82,6 +87,7 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, log
 		largestAcked:             protocol.InvalidPacketNumber,
 		lowestRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey:  protocol.InvalidPacketNumber,
+		invalidPacketLimit:       protocol.InvalidPacketLimitAES, // Initial packets use AES-128-GCM
 		rttStats:                 rttStats,
 		qlogger:                  qlogger,
 		logger:                   logger,
@@ -168,6 +174,25 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
+	switch suite.ID {
+	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
+		a.invalidPacketLimit = protocol.InvalidPacketLimitAES
+	case tls.TLS_CHACHA20_POLY1305_SHA256:
+		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha
+	default:
+		panic(fmt.Sprintf("unknown cipher suite %d", suite.ID))
+	}
+}
+
+// CountInvalidPacket counts a packet that failed authentication with any key.
+// RFC 9001, Section 6.6 applies the integrity limit of the selected AEAD to failures across all keys.
+// It returns an AEAD_LIMIT_REACHED error once the limit is reached.
+func (a *updatableAEAD) CountInvalidPacket() error {
+	a.invalidPacketCount++
+	if a.invalidPacketCount >= a.invalidPacketLimit {
+		return &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
+	}
+	return nil
 }
 
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {

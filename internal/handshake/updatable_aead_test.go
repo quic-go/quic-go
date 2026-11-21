@@ -218,6 +218,16 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 	require.Equal(t, protocol.PacketNumber(0x1337), server.FirstPacketNumber()) // make sure we save the first packet number
 }
 
+func TestAEADLimitReached(t *testing.T) {
+	a := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.Version1)
+	a.invalidPacketCount = protocol.InvalidPacketLimitChaCha
+	// Initial packets use AES-128-GCM
+	require.NoError(t, a.CountInvalidPacket())
+	// the limit of the selected AEAD applies to packets that failed with any of the keys
+	a.SetReadKey(getCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256), make([]byte, 32))
+	require.ErrorIs(t, a.CountInvalidPacket(), &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
+}
+
 func TestKeyUpdates(t *testing.T) {
 	client, server, _ := setupEndpoints(t, utils.NewRTTStats())
 
