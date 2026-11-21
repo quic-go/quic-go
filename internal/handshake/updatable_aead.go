@@ -172,8 +172,8 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
-	// RFC 9001, Section 6.6 applies the integrity limit to packets failing authentication with any key.
-	// Leave room for the Initial (twice, after a Retry), Handshake and 0-RTT keys.
+	// Leave room for the failures with the long header keys: Initial (twice, after a Retry), Handshake and 0-RTT.
+	// This closes the connection earlier than RFC 9001, Section 6.6 requires.
 	const longHeaderLimit = 4 * protocol.InvalidPacketLimitLongHeader
 	switch suite.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:

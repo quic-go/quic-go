@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -157,4 +158,4 @@ const InvalidPacketLimitChaCha = 1 << 36
 
 // InvalidPacketLimitLongHeader is the maximum number of packets that we can fail to decrypt
 // with an Initial, Handshake or 0-RTT key.
-const InvalidPacketLimitLongHeader = 1 << 32
+const InvalidPacketLimitLongHeader = math.MaxUint32
