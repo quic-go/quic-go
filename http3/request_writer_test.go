@@ -188,4 +188,10 @@ func TestRequestWriterTrailers(t *testing.T) {
 	req.Trailer = http.Header{"Upgrade": {"foo"}}
 	require.NoError(t, rw.WriteRequestTrailer(buf, req, 42, nil))
 	require.Zero(t, buf.Len())
+
+	// no trailers are sent on a CONNECT stream
+	req.Method = http.MethodConnect
+	req.Trailer = http.Header{"Trailer1": {"foo"}}
+	require.NoError(t, rw.WriteRequestTrailer(buf, req, 42, nil))
+	require.Zero(t, buf.Len())
 }
