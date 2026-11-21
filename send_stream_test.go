@@ -235,7 +235,7 @@ func TestSendStreamWriteWithLimit(t *testing.T) {
 
 		frame, _, hasMore = str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.Nil(t, frame.Frame)
-		require.True(t, hasMore)
+		require.False(t, hasMore)
 		require.Equal(t, 2, calls)
 
 		str.updateSendWindow(57)
