@@ -34,9 +34,10 @@ func newStreamFlowController(
 	logger utils.Logger,
 ) *streamFlowController {
 	return &streamFlowController{
-		streamID:   streamID,
-		connection: cfc,
-		sendWindow: initialSendWindow,
+		streamID:      streamID,
+		connection:    cfc,
+		sendWindow:    initialSendWindow,
+		lastBlockedAt: protocol.InvalidByteCount,
 		receiveFlowController: receiveFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
@@ -157,17 +158,14 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return min(c.sendWindow-c.bytesSent, c.connection.SendWindowSize())
 }
 
+// IsNewlyBlocked says if it is newly blocked by stream flow control.
+// For every offset, it only returns true once.
 func (c *streamFlowController) IsNewlyBlocked() bool {
-	blocked, _ := c.isNewlyBlocked()
-	return blocked
-}
-
-func (c *streamFlowController) isNewlyBlocked() (bool, protocol.ByteCount) {
 	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
-		return false, 0
+		return false
 	}
 	c.lastBlockedAt = c.sendWindow
-	return true, c.sendWindow
+	return true
 }
 
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {
