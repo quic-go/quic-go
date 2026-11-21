@@ -179,6 +179,10 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	context.AfterFunc(str.Context(), cancel)
 
 	hstr := newServerStream(str, conn, qlogger)
+	// Only DATA frames are allowed after a CONNECT request (RFC 9114, Section 4.4).
+	if req.Method == http.MethodConnect {
+		hstr.rejectTrailer()
+	}
 
 	// We only use the client's priority for local scheduling.
 	// A Priority response header is only transmitted so that potential intermediaries can use it,
