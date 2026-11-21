@@ -2468,6 +2468,7 @@ func (c *Conn) restoreTransportParameters(params *wire.TransportParameters) {
 	}
 
 	c.peerParams.Store(params)
+	c.packer.SetMaxDatagramFrameSize(params.MaxDatagramFrameSize)
 	// Connection IDs are issued when the handshake completes, since 0-RTT might be rejected.
 	c.connFlowController.UpdateSendWindow(params.InitialMaxData)
 	c.streamsMap.HandleTransportParameters(params)
@@ -2485,6 +2486,7 @@ func (c *Conn) handleTransportParameters(params *wire.TransportParameters) error
 	}
 
 	c.peerParams.Store(params)
+	c.packer.SetMaxDatagramFrameSize(params.MaxDatagramFrameSize)
 	// On the client side we have to wait for handshake completion.
 	// During a 0-RTT connection, we are only allowed to use the new transport parameters for 1-RTT packets.
 	if c.perspective == protocol.PerspectiveServer {
