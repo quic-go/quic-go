@@ -142,7 +142,7 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		c.rejectWithHeaderFieldsTooLarge(str)
 		return
 	}
-	headerBlock, err := readHeaderBlock(str, hf.Length)
+	headerBlock, err := readHeaderBlock(fp, hf.Length)
 	if err != nil {
 		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
@@ -189,8 +189,8 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newStream(str, conn, nil, func(_ io.Reader, hf *headersFrame) error {
-		trailers, err := decodeTrailers(str, hf, maxHeaderBytes, decoder, qlogger)
+	hstr := newStream(str, conn, nil, func(r io.Reader, hf *headersFrame) error {
+		trailers, err := decodeTrailers(r, str, hf, maxHeaderBytes, decoder, qlogger)
 		if err != nil {
 			return err
 		}

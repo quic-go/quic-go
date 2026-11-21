@@ -84,12 +84,13 @@ func TestStreamReadDataFrames(t *testing.T) {
 	eventRecorder.Clear()
 
 	buf.Write(getDataFrame([]byte("lorem")))
+	buf.Write(getDataFrame(nil))
 	buf.Write(getDataFrame([]byte("ipsum")))
 
 	data, err := io.ReadAll(str)
 	require.NoError(t, err)
 	require.Equal(t, "loremipsum", string(data))
-	require.Len(t, eventRecorder.Events(qlog.FrameParsed{}), 2)
+	require.Len(t, eventRecorder.Events(qlog.FrameParsed{}), 3)
 	eventRecorder.Clear()
 
 	// invalid frame

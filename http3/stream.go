@@ -41,8 +41,6 @@ type Stream struct {
 	conn        *rawConn
 	frameParser *frameParser
 
-	bytesRemainingInFrame uint64
-
 	// the DATA frame being written: the unwritten part of its header, and the payload bytes still to write
 	frameHeader           []byte
 	bytesUnwrittenInFrame uint64
@@ -79,7 +77,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 	s.addQlogProducer()
 	defer s.removeQlogProducer()
 
-	if s.bytesRemainingInFrame == 0 {
+	if !s.frameParser.HasMoreData() {
 	parseLoop:
 		for {
 			frame, err := s.frameParser.ParseNext(s.qlogger)
@@ -95,7 +93,9 @@ func (s *Stream) Read(b []byte) (int, error) {
 					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 					return 0, errors.New("DATA frame received after trailers")
 				}
-				s.bytesRemainingInFrame = f.Length
+				if f.Length == 0 { // no payload to read
+					continue
+				}
 				break parseLoop
 			case *headersFrame:
 				if s.parsedTrailer {
@@ -104,7 +104,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
-				return 0, maybeReplaceError(s.parseTrailer(s.datagramStream, f))
+				return 0, maybeReplaceError(s.parseTrailer(s.frameParser, f))
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -114,19 +114,12 @@ func (s *Stream) Read(b []byte) (int, error) {
 		}
 	}
 
-	var n int
-	var err error
-	if s.bytesRemainingInFrame < uint64(len(b)) {
-		n, err = s.datagramStream.Read(b[:s.bytesRemainingInFrame])
-	} else {
-		n, err = s.datagramStream.Read(b)
-	}
-	s.bytesRemainingInFrame -= uint64(n)
+	n, err := s.frameParser.Read(b)
 	return n, maybeReplaceError(err)
 }
 
 func (s *Stream) hasMoreData() bool {
-	return s.bytesRemainingInFrame > 0
+	return s.frameParser.HasMoreData()
 }
 
 // hasUnfinishedFrame reports whether a Write failed partway through a DATA frame.
@@ -506,7 +499,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
 		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
 	}
-	headerBlock, err := readHeaderBlock(s.str.datagramStream, hf.Length)
+	headerBlock, err := readHeaderBlock(s.str.frameParser, hf.Length)
 	if err != nil {
 		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))

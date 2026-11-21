@@ -177,8 +177,8 @@ func (c *ClientConn) openRequestStream(
 	rsp := &http.Response{}
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
-		newStream(hstr, c.rawConn, trace, func(_ io.Reader, hf *headersFrame) error {
-			hdr, err := decodeTrailers(hstr, hf, maxHeaderBytes, c.decoder, c.qlogger)
+		newStream(hstr, c.rawConn, trace, func(r io.Reader, hf *headersFrame) error {
+			hdr, err := decodeTrailers(r, hstr, hf, maxHeaderBytes, c.decoder, c.qlogger)
 			if err != nil {
 				return err
 			}

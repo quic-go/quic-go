@@ -32,6 +32,27 @@ func TestResponseBodyReading(t *testing.T) {
 	require.Equal(t, []byte("foobar"), data)
 }
 
+func TestResponseBodyUnreadTrailers(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	var buf bytes.Buffer
+	buf.Write(getDataFrame([]byte("foo")))
+	buf.Write((&headersFrame{Length: 3}).Append(nil))
+	buf.Write([]byte("bar"))
+	str := NewMockDatagramStream(mockCtrl)
+	str.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	str.EXPECT().Read(gomock.Any()).DoAndReturn(buf.Read).AnyTimes()
+	// the trailers are rejected without being read, e.g. because they're too large
+	rb := newResponseBody(
+		newStream(str, nil, nil, func(io.Reader, *headersFrame) error { return assert.AnError }, nil),
+		3,
+		make(chan struct{}),
+	)
+
+	data, err := io.ReadAll(rb)
+	require.ErrorIs(t, err, assert.AnError)
+	require.Equal(t, []byte("foo"), data)
+}
+
 func TestResponseBodyReadError(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str := NewMockDatagramStream(mockCtrl)
