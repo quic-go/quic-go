@@ -219,6 +219,10 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 }
 
 func TestAEADLimitReached(t *testing.T) {
+	if fips140.Enabled() {
+		t.Skip("ChaCha20-Poly1305 is not allowed in FIPS 140-3 mode")
+	}
+
 	a := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.Version1)
 	a.invalidPacketCount = protocol.InvalidPacketLimitChaCha
 	// Initial packets use AES-128-GCM
