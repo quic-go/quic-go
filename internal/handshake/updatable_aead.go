@@ -172,11 +172,17 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
+	// RFC 9001, Section 6.6 counts failures across all keys.
+	// To avoid sharing a counter with the long header openers, we subtract their limits:
+	// Initial (twice, after a Retry), Handshake and 0-RTT.
+	// Closing earlier than required doesn't matter in practice:
+	// an attacker still needs more than 2^35 forged packets.
+	const longHeaderLimit = 4 * protocol.InvalidPacketLimitLongHeader
 	switch suite.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
-		a.invalidPacketLimit = protocol.InvalidPacketLimitAES
+		a.invalidPacketLimit = protocol.InvalidPacketLimitAES - longHeaderLimit
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
-		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha
+		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha - longHeaderLimit
 	default:
 		panic(fmt.Sprintf("unknown cipher suite %d", suite.ID))
 	}

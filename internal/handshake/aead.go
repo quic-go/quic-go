@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 )
 
 func createAEAD(suite cipherSuite, trafficSecret []byte, v protocol.Version) cipher.AEAD {
@@ -53,6 +54,7 @@ func (s *longHeaderSealer) Overhead() int {
 type longHeaderOpener struct {
 	aead            cipher.AEAD
 	headerProtector headerProtector
+	invalidPackets  uint32
 
 	// use a single array to avoid allocations
 	nonceBuf [8]byte
@@ -74,6 +76,14 @@ func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []
 	binary.BigEndian.PutUint64(o.nonceBuf[:], uint64(pn))
 	dec, err := o.aead.Open(dst, o.nonceBuf[:], src, ad)
 	if err != nil {
+		// RFC 9001, Section 6.6 counts failures across all keys.
+		// To avoid sharing a counter between the openers, each long header key has its own limit,
+		// and the 1-RTT limit is reduced accordingly.
+		// These keys are dropped long before an attacker could send 2^32 forged packets.
+		o.invalidPackets++
+		if o.invalidPackets >= protocol.InvalidPacketLimitLongHeader {
+			return nil, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
+		}
 		err = ErrDecryptionFailed
 	}
 	return dec, err
