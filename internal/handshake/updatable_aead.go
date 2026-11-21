@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto"
 	"crypto/cipher"
-	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
@@ -42,7 +41,6 @@ type updatableAEAD struct {
 	firstPacketNumber  protocol.PacketNumber
 	handshakeConfirmed bool
 
-	invalidPacketLimit uint64
 	invalidPacketCount uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
@@ -172,27 +170,18 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
-	// RFC 9001, Section 6.6 counts failures across all keys.
-	// To avoid sharing a counter with the long header openers, we subtract their limits:
-	// Initial (twice, after a Retry), Handshake and 0-RTT.
-	// Closing earlier than required doesn't matter in practice:
-	// an attacker still needs more than 2^35 forged packets.
-	const longHeaderLimit = 4 * protocol.InvalidPacketLimitLongHeader
-	switch suite.ID {
-	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
-		a.invalidPacketLimit = protocol.InvalidPacketLimitAES - longHeaderLimit
-	case tls.TLS_CHACHA20_POLY1305_SHA256:
-		a.invalidPacketLimit = protocol.InvalidPacketLimitChaCha - longHeaderLimit
-	default:
-		panic(fmt.Sprintf("unknown cipher suite %d", suite.ID))
-	}
 }
 
 func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
 	if err == ErrDecryptionFailed {
 		a.invalidPacketCount++
-		if a.invalidPacketCount >= a.invalidPacketLimit {
+		// RFC 9001, Section 6.6 counts failures across all keys.
+		// To avoid sharing a counter with the long header openers, we subtract their limits:
+		// Initial (twice, after a Retry), Handshake and 0-RTT.
+		// Closing earlier than required doesn't matter in practice:
+		// an attacker still needs more than 2^35 forged packets.
+		if a.invalidPacketCount >= a.suite.IntegrityLimit()-4*protocol.InvalidPacketLimitLongHeader {
 			return nil, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
 		}
 	}
