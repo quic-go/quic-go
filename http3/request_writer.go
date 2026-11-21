@@ -315,6 +315,10 @@ func shouldSendReqContentLength(method string, contentLength int64) bool {
 // WriteRequestTrailer writes HTTP trailers to the stream.
 // It should be called after the request body has been fully written.
 func (w *requestWriter) WriteRequestTrailer(wr io.Writer, req *http.Request, streamID quic.StreamID, qlogger qlogwriter.Recorder) error {
+	// only DATA frames can be sent on a CONNECT stream (section 4.4 of RFC 9114)
+	if req.Method == http.MethodConnect {
+		return nil
+	}
 	_, err := writeTrailers(wr, req.Trailer, streamID, qlogger)
 	return err
 }
