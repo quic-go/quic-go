@@ -271,6 +271,21 @@ func TestStreamTryWriteAllAfterPartialWrite(t *testing.T) {
 	require.NoError(t, str.TryWriteAll([]byte("obarbaz")))
 }
 
+func TestStreamCloseAfterPartialWrite(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	qstr := NewMockDatagramStream(mockCtrl)
+	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
+	qstr.EXPECT().Write((&dataFrame{Length: 6}).Append(nil)).DoAndReturn(io.Discard.Write)
+	qstr.EXPECT().Write([]byte("foobar")).Return(2, os.ErrDeadlineExceeded)
+	str := newStream(qstr, nil, nil, nil, nil)
+	_, err := str.Write([]byte("foobar"))
+	require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+
+	// a FIN would truncate the DATA frame
+	qstr.EXPECT().CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+	require.Error(t, str.Close())
+}
+
 func TestStreamQlogWriteAfterConnectionClose(t *testing.T) {
 	clientConn, _ := newConnPair(t)
 	rec := &closeTrackingRecorder{closed: make(chan struct{})}
