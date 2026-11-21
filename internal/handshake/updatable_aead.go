@@ -181,7 +181,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol
 		// Initial (twice, after a Retry), Handshake and 0-RTT.
 		// Closing earlier than required doesn't matter in practice:
 		// an attacker still needs more than 2^35 forged packets.
-		if a.invalidPacketCount >= a.suite.IntegrityLimit-4*protocol.InvalidPacketLimitLongHeader {
+		if a.invalidPacketCount >= a.suite.IntegrityLimit()-4*protocol.InvalidPacketLimitLongHeader {
 			return nil, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
 		}
 	}
