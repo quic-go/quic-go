@@ -219,17 +219,27 @@ func TestUpdatableAEADPacketNumbers(t *testing.T) {
 }
 
 func TestAEADLimitReached(t *testing.T) {
-	if fips140.Enabled() {
-		t.Skip("ChaCha20-Poly1305 is not allowed in FIPS 140-3 mode")
+	client, _, _ := setupEndpoints(t, utils.NewRTTStats())
+	client.invalidPacketLimit = 10
+	for i := range 9 {
+		_, err := client.Open(nil, []byte("foobar"), monotime.Now(), protocol.PacketNumber(i), protocol.KeyPhaseZero, []byte("ad"))
+		require.ErrorIs(t, err, ErrDecryptionFailed)
 	}
+	_, err := client.Open(nil, []byte("foobar"), monotime.Now(), 10, protocol.KeyPhaseZero, []byte("ad"))
+	var transportErr *qerr.TransportError
+	require.ErrorAs(t, err, &transportErr)
+	require.Equal(t, qerr.AEADLimitReached, transportErr.ErrorCode)
+}
 
+func TestAEADLimitLongHeader(t *testing.T) {
 	a := newUpdatableAEAD(utils.NewRTTStats(), nil, utils.DefaultLogger, protocol.Version1)
-	a.invalidPacketCount = protocol.InvalidPacketLimitChaCha
-	// Initial packets use AES-128-GCM
-	require.NoError(t, a.CountInvalidPacket())
-	// the limit of the selected AEAD applies to packets that failed with any of the keys
-	a.SetReadKey(getCipherSuite(tls.TLS_CHACHA20_POLY1305_SHA256), make([]byte, 32))
-	require.ErrorIs(t, a.CountInvalidPacket(), &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
+	_, opener := newInitialAEAD(protocol.ParseConnectionID([]byte{1, 2, 3, 4}), protocol.PerspectiveServer, protocol.Version1, a)
+	// before the 1-RTT keys are installed, the limit of AES-128-GCM applies
+	a.invalidPacketCount = protocol.InvalidPacketLimitAES - 2
+	_, err := opener.Open(nil, []byte("foobar"), 1, []byte("ad"))
+	require.ErrorIs(t, err, ErrDecryptionFailed)
+	_, err = opener.Open(nil, []byte("foobar"), 2, []byte("ad"))
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
 }
 
 func TestKeyUpdates(t *testing.T) {

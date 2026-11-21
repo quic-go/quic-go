@@ -42,9 +42,9 @@ type updatableAEAD struct {
 	firstPacketNumber  protocol.PacketNumber
 	handshakeConfirmed bool
 
+	invalidPacketLimit uint64
 	// packets that failed authentication with any key
 	invalidPacketCount uint64
-	invalidPacketLimit uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
 	prevRcvAEADExpiry monotime.Time
@@ -184,8 +184,18 @@ func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	}
 }
 
+func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
+	if err == ErrDecryptionFailed {
+		if err := a.CountInvalidPacket(); err != nil {
+			return nil, err
+		}
+	}
+	return dec, err
+}
+
 // CountInvalidPacket counts a packet that failed authentication with any key.
-// RFC 9001, Section 6.6 applies the integrity limit of the selected AEAD to failures across all keys.
+// RFC 9001, Section 6.6 applies the integrity limit of the selected AEAD across all keys.
 // It returns an AEAD_LIMIT_REACHED error once the limit is reached.
 func (a *updatableAEAD) CountInvalidPacket() error {
 	a.invalidPacketCount++
@@ -195,7 +205,7 @@ func (a *updatableAEAD) CountInvalidPacket() error {
 	return nil
 }
 
-func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
 		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)

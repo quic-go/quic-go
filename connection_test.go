@@ -922,15 +922,6 @@ func testConnectionUnpackFailureFatal(t *testing.T, unpackErr error) error {
 	return nil
 }
 
-func TestConnectionUnpackFailureAEADLimit(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	cs := mocks.NewMockCryptoSetup(mockCtrl)
-	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptCryptoSetup(cs))
-	cs.EXPECT().CountInvalidPacket().Return(&qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
-	_, err := tc.conn.handleUnpackError(handshake.ErrDecryptionFailed, receivedPacket{}, qlog.PacketTypeHandshake, 0)
-	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached})
-}
-
 func TestConnectionUnpackFailureDropped(t *testing.T) {
 	t.Run("keys dropped", func(t *testing.T) {
 		testConnectionUnpackFailureDropped(t, handshake.ErrKeysDropped, qlog.PacketDropKeysUnavailable)

@@ -53,6 +53,8 @@ func (s *longHeaderSealer) Overhead() int {
 type longHeaderOpener struct {
 	aead            cipher.AEAD
 	headerProtector headerProtector
+	// counts packets that fail authentication, nil if not used by a connection
+	counter *updatableAEAD
 
 	// use a single array to avoid allocations
 	nonceBuf [8]byte
@@ -60,13 +62,14 @@ type longHeaderOpener struct {
 
 var _ LongHeaderOpener = &longHeaderOpener{}
 
-func newLongHeaderOpener(aead cipher.AEAD, headerProtector headerProtector) LongHeaderOpener {
+func newLongHeaderOpener(aead cipher.AEAD, headerProtector headerProtector, counter *updatableAEAD) LongHeaderOpener {
 	if aead.NonceSize() != 8 {
 		panic("unexpected nonce size")
 	}
 	return &longHeaderOpener{
 		aead:            aead,
 		headerProtector: headerProtector,
+		counter:         counter,
 	}
 }
 
@@ -74,6 +77,11 @@ func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []
 	binary.BigEndian.PutUint64(o.nonceBuf[:], uint64(pn))
 	dec, err := o.aead.Open(dst, o.nonceBuf[:], src, ad)
 	if err != nil {
+		if o.counter != nil {
+			if err := o.counter.CountInvalidPacket(); err != nil {
+				return nil, err
+			}
+		}
 		err = ErrDecryptionFailed
 	}
 	return dec, err

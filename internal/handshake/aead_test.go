@@ -19,7 +19,7 @@ func getSealerAndOpener(t *testing.T, cs cipherSuite, v protocol.Version) (LongH
 	rand.Read(hpKey)
 	aead := createAEAD(cs, trafficSecret, v)
 	return newLongHeaderSealer(aead, newHeaderProtector(cs, hpKey, true, v)),
-		newLongHeaderOpener(aead, newHeaderProtector(cs, hpKey, true, v))
+		newLongHeaderOpener(aead, newHeaderProtector(cs, hpKey, true, v), nil)
 }
 
 func TestEncryptAndDecryptMessage(t *testing.T) {

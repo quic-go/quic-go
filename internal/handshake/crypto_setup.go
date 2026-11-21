@@ -138,7 +138,8 @@ func newCryptoSetup(
 	perspective protocol.Perspective,
 	version protocol.Version,
 ) *cryptoSetup {
-	initialSealer, initialOpener := NewInitialAEAD(connID, perspective, version)
+	aead := newUpdatableAEAD(rttStats, qlogger, logger, version)
+	initialSealer, initialOpener := newInitialAEAD(connID, perspective, version, aead)
 	if qlogger != nil {
 		qlogger.RecordEvent(qlog.KeyUpdated{
 			Trigger: qlog.KeyUpdateTLS,
@@ -152,7 +153,7 @@ func newCryptoSetup(
 	return &cryptoSetup{
 		initialSealer: initialSealer,
 		initialOpener: initialOpener,
-		aead:          newUpdatableAEAD(rttStats, qlogger, logger, version),
+		aead:          aead,
 		events:        make([]Event, 0, 16),
 		ourParams:     tp,
 		rttStats:      rttStats,
@@ -164,7 +165,7 @@ func newCryptoSetup(
 }
 
 func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
-	initialSealer, initialOpener := NewInitialAEAD(id, h.perspective, h.version)
+	initialSealer, initialOpener := newInitialAEAD(id, h.perspective, h.version, h.aead)
 	h.initialSealer = initialSealer
 	h.initialOpener = initialOpener
 	if h.qlogger != nil {
@@ -181,11 +182,6 @@ func (h *cryptoSetup) ChangeConnectionID(id protocol.ConnectionID) {
 
 func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
 	return h.aead.SetLargestAcked(pn)
-}
-
-// CountInvalidPacket counts a packet that failed authentication, with any of the keys.
-func (h *cryptoSetup) CountInvalidPacket() error {
-	return h.aead.CountInvalidPacket()
 }
 
 func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
@@ -463,6 +459,7 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		h.zeroRTTOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
+			h.aead,
 		)
 		h.used0RTT.Store(true)
 		if h.logger.Debug() {
@@ -473,6 +470,7 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 		h.handshakeOpener = newLongHeaderOpener(
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
+			h.aead,
 		)
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed Handshake Read keys (using %s)", tls.CipherSuiteName(suite.ID))

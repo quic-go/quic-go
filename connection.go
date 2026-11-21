@@ -37,7 +37,6 @@ type cryptoStreamHandler interface {
 	StartHandshake(context.Context) error
 	ChangeConnectionID(protocol.ConnectionID)
 	SetLargest1RTTAcked(protocol.PacketNumber) error
-	CountInvalidPacket() error
 	SetHandshakeConfirmed()
 	GetSessionTicket() ([]byte, error)
 	NextEvent() handshake.Event
@@ -1515,7 +1514,7 @@ func (c *Conn) handleUnpackError(err error, p receivedPacket, pt qlog.PacketType
 			})
 		}
 		c.logger.Debugf("Dropping %s packet (%d bytes) that could not be unpacked. Error: %s", pt, p.Size(), err)
-		return false, c.cryptoStreamHandler.CountInvalidPacket()
+		return false, nil
 	default:
 		if _, ok := errors.AsType[*headerParseError](err); ok {
 			// This might be a packet injected by an attacker. Drop it.
