@@ -366,6 +366,31 @@ func TestServerStreamResetByClient(t *testing.T) {
 	require.False(t, called)
 }
 
+func TestServerConnectHeadersAfterRequest(t *testing.T) {
+	clientConn, serverConn := newConnPair(t)
+	str, err := clientConn.OpenStream()
+	require.NoError(t, err)
+	_, err = str.Write(encodeRequest(t, httptest.NewRequest(http.MethodConnect, "https://example.com", nil)))
+	require.NoError(t, err)
+	// only DATA frames are allowed on a CONNECT stream
+	_, err = writeTrailers(str, http.Header{"Foo": {"bar"}}, str.StreamID(), nil)
+	require.NoError(t, err)
+
+	go (&Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.ReadAll(r.Body) }),
+	}).ServeQUICConn(serverConn)
+
+	select {
+	case <-clientConn.Context().Done():
+		require.ErrorIs(t,
+			context.Cause(clientConn.Context()),
+			&quic.ApplicationError{Remote: true, ErrorCode: quic.ApplicationErrorCode(ErrCodeFrameUnexpected)},
+		)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for close")
+	}
+}
+
 func TestServerReadHeaderTimeout(t *testing.T) {
 	clientConn, serverConn := newConnPair(t)
 	s := &Server{

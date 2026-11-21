@@ -304,20 +304,15 @@ func TestRequestStream(t *testing.T) {
 	clientConn, _ := newConnPair(t)
 	conn := newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil)
 	str := newRequestStream(
-		newStream(
-			qstr,
-			conn,
-			&httptrace.ClientTrace{},
-			func(io.Reader, *headersFrame) error { return nil },
-			nil,
-		),
+		qstr,
 		conn,
+		&httptrace.ClientTrace{},
+		nil,
 		requestWriter,
 		make(chan struct{}),
 		qpack.NewDecoder(),
 		true,
 		math.MaxInt,
-		&http.Response{},
 	)
 	require.Same(t, clientConn.QlogTrace(), str.QlogTrace())
 

@@ -536,6 +536,8 @@ func TestClientConnectIgnoresContentLength(t *testing.T) {
 		}
 		str.Write(append((&headersFrame{Length: uint64(hdr.Len())}).Append(nil), hdr.Bytes()...))
 		str.Write(getDataFrame([]byte("foobar")))
+		// only DATA frames are allowed once the CONNECT method has completed
+		writeTrailers(str, http.Header{"Foo": {"bar"}}, str.StreamID(), nil)
 		str.Close()
 	}()
 
@@ -543,7 +545,7 @@ func TestClientConnectIgnoresContentLength(t *testing.T) {
 	rsp, err := (&Transport{}).NewClientConn(clientConn).RoundTrip(req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(rsp.Body)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "HEADERS frame received on a CONNECT stream")
 	require.Equal(t, []byte("foobar"), body)
 }
 

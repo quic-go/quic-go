@@ -301,28 +301,45 @@ type RequestStream struct {
 	requestedGzip bool
 	isConnect     bool
 	isHead        bool
+	isTunnel      bool // set by ReadResponse after a 2xx response to a CONNECT request
 }
 
 func newRequestStream(
-	str *Stream,
+	str datagramStream,
 	conn *rawConn,
+	trace *httptrace.ClientTrace,
+	qlogger qlogwriter.Recorder,
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
 	decoder *qpack.Decoder,
 	disableCompression bool,
 	maxHeaderBytes int,
-	rsp *http.Response,
 ) *RequestStream {
-	return &RequestStream{
-		str:                str,
+	s := &RequestStream{
 		conn:               conn,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
 		decoder:            decoder,
 		disableCompression: disableCompression,
 		maxHeaderBytes:     maxHeaderBytes,
-		response:           rsp,
+		response:           &http.Response{},
 	}
+	s.str = newStream(str, conn, trace, func(_ io.Reader, hf *headersFrame) error {
+		// Once the CONNECT method has completed, only DATA frames are allowed,
+		// and a HEADERS frame is a connection error of type H3_FRAME_UNEXPECTED (RFC 9114, Section 4.4).
+		if s.isTunnel {
+			maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
+			conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return errors.New("HEADERS frame received on a CONNECT stream")
+		}
+		trailers, err := decodeTrailers(str, hf, maxHeaderBytes, decoder, qlogger)
+		if err != nil {
+			return err
+		}
+		s.response.Trailer = trailers
+		return nil
+	}, qlogger)
+	return s
 }
 
 // Read reads data from the underlying stream.
@@ -547,6 +564,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	// Its Content-Length must be ignored, see section 9.3.6 of RFC 9110.
 	if isSuccessfulConnect {
 		contentLength = -1
+		s.isTunnel = true
 	}
 	respBody := newResponseBody(s.str, contentLength, s.reqDone)
 
