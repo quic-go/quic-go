@@ -26,8 +26,8 @@ type cipherSuite struct {
 
 func (s cipherSuite) IVLen() int { return aeadNonceLength }
 
-// IntegrityLimit returns the number of packets that may fail authentication before
-// RFC 9001, Section 6.6 requires closing the connection.
+// IntegrityLimit returns the number of packets that may fail authentication
+// before RFC 9001, Section 6.6 requires closing the connection.
 func (s cipherSuite) IntegrityLimit() uint64 {
 	switch s.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
