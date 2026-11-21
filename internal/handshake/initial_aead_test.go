@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"bytes"
+	"crypto/fips140"
 	"crypto/rand"
 	"testing"
 
@@ -9,6 +10,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func computeInitialSecretsForTest(connID protocol.ConnectionID, v protocol.Version) (clientSecret, serverSecret []byte) {
+	// Match NewInitialAEAD's FIPS exemption for deriving Initial secrets from a public connection ID.
+	fips140.WithoutEnforcement(func() {
+		clientSecret, serverSecret = computeSecrets(connID, v)
+	})
+	return
+}
 
 func TestComputeClientKeyAndIV(t *testing.T) {
 	connID := protocol.ParseConnectionID(splitHexString(t, "0x8394c8f03e515708"))
@@ -38,7 +47,7 @@ func TestComputeClientKeyAndIV(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			clientSecret, _ := computeSecrets(connID, tt.version)
+			clientSecret, _ := computeInitialSecretsForTest(connID, tt.version)
 			require.Equal(t, tt.expectedClientSecret, clientSecret)
 			key, iv := computeInitialKeyAndIV(clientSecret, tt.version)
 			require.Equal(t, tt.expectedKey, key)
@@ -75,7 +84,7 @@ func TestComputeServerKeyAndIV(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, serverSecret := computeSecrets(connID, tt.version)
+			_, serverSecret := computeInitialSecretsForTest(connID, tt.version)
 			require.Equal(t, tt.expectedServerSecret, serverSecret)
 			key, iv := computeInitialKeyAndIV(serverSecret, tt.version)
 			require.Equal(t, tt.expectedKey, key)

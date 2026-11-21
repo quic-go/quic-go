@@ -40,8 +40,10 @@ func TestHKDF(t *testing.T) {
 	for _, id := range tls13CipherSuites {
 		t.Run(tls.CipherSuiteName(id), func(t *testing.T) {
 			cs := cipherSuiteTLS13ByID(id)
-			expected := nextTrafficSecret(cs, []byte("foobar"))
-			expanded := hkdfExpandLabel(cs.Hash, []byte("foobar"), nil, "traffic upd", cs.Hash.Size())
+			secret := make([]byte, cs.Hash.Size())
+			rand.Read(secret)
+			expected := nextTrafficSecret(cs, secret)
+			expanded := hkdfExpandLabel(cs.Hash, secret, nil, "traffic upd", cs.Hash.Size())
 			require.Equal(t, expected, expanded)
 		})
 	}
