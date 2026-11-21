@@ -20,6 +20,14 @@ type frame any
 
 var errPriorityUpdateForPush = errors.New("http3: PRIORITY_UPDATE frame for push")
 
+// A reservedSettingError is returned when a SETTINGS frame contains a
+// reserved setting identifier, see Section 7.2.4.1 of RFC 9114.
+type reservedSettingError struct{ id uint64 }
+
+func (e *reservedSettingError) Error() string {
+	return fmt.Sprintf("http3: reserved setting: %d", e.id)
+}
+
 // The maximum length of an encoded HTTP/3 frame header is 16:
 // The frame has a type and length field, both QUIC varints (maximum 8 bytes in length)
 const frameHeaderLen = 16
@@ -88,7 +96,17 @@ func (p *frameParser) ParseNext(qlogger qlogwriter.Recorder) (frame, error) {
 				headerLen: r.NumRead,
 			}, nil
 		case 0x4: // SETTINGS
-			return parseSettingsFrame(r, l, p.streamID, qlogger)
+			f, err := parseSettingsFrame(r, l, p.streamID, qlogger)
+			if err != nil {
+				var rerr *reservedSettingError
+				if errors.As(err, &rerr) {
+					// Section 7.2.4.1 of RFC 9114: receipt of a reserved setting
+					// MUST be treated as a connection error of type H3_SETTINGS_ERROR.
+					p.closeConn(quic.ApplicationErrorCode(ErrCodeSettingsError), "")
+				}
+				return nil, err
+			}
+			return f, nil
 		case 0x3: // unsupported: CANCEL_PUSH
 			if qlogger != nil {
 				qlogger.RecordEvent(qlog.FrameParsed{
@@ -213,6 +231,9 @@ func parseSettingsFrame(r *countingByteReader, l uint64, streamID quic.StreamID,
 		}
 
 		switch id {
+		case 0x0, 0x2, 0x3, 0x4, 0x5:
+			// Setting identifiers reserved in Section 11.2.2 of RFC 9114.
+			return nil, &reservedSettingError{id: id}
 		case settingMaxFieldSectionSize:
 			if frame.MaxFieldSectionSize >= 0 {
 				return nil, fmt.Errorf("duplicate setting: %d", id)

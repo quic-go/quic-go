@@ -280,6 +280,31 @@ func TestParserSettingsFrameDuplicateSettings(t *testing.T) {
 	}
 }
 
+func TestParserSettingsFrameReservedSettings(t *testing.T) {
+	// Setting identifiers 0x0, 0x2, 0x3, 0x4 and 0x5 are reserved,
+	// see Section 11.2.2 of RFC 9114. Their receipt MUST be treated as a
+	// connection error of type H3_SETTINGS_ERROR, see Section 7.2.4.1.
+	for _, id := range []uint64{0x0, 0x2, 0x3, 0x4, 0x5} {
+		t.Run(fmt.Sprintf("setting %#x", id), func(t *testing.T) {
+			settings := appendSetting(nil, id, 37)
+			data := quicvarint.Append(nil, 4) // type byte
+			data = quicvarint.Append(data, uint64(len(settings)))
+			data = append(data, settings...)
+			var closeCode quic.ApplicationErrorCode
+			fp := frameParser{
+				r: bytes.NewReader(data),
+				closeConn: func(code quic.ApplicationErrorCode, _ string) error {
+					closeCode = code
+					return nil
+				},
+			}
+			_, err := fp.ParseNext(nil)
+			require.Error(t, err)
+			require.Equal(t, quic.ApplicationErrorCode(ErrCodeSettingsError), closeCode)
+		})
+	}
+}
+
 func TestParserSettingsFrameMaxFieldSectionSize(t *testing.T) {
 	t.Run("absent", func(t *testing.T) {
 		testParserSettingsFrameMaxFieldSectionSize(t, false)
