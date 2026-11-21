@@ -244,15 +244,21 @@ func testServerRequestHandling(t *testing.T,
 	return hfs, content
 }
 
-func TestServerFirstFrameNotHeaders(t *testing.T) {
+func TestServerInvalidFirstFrame(t *testing.T) {
+	t.Run("not a HEADERS frame", func(t *testing.T) {
+		testServerInvalidFirstFrame(t, getDataFrame([]byte("foobar")), ErrCodeFrameUnexpected)
+	})
+	t.Run("truncated HEADERS frame", func(t *testing.T) {
+		testServerInvalidFirstFrame(t, (&headersFrame{Length: 10}).Append(nil), ErrCodeFrameError)
+	})
+}
+
+func testServerInvalidFirstFrame(t *testing.T, data []byte, expectedErr ErrCode) {
 	clientConn, serverConn := newConnPair(t)
 	str, err := clientConn.OpenStream()
 	require.NoError(t, err)
 
-	var buf bytes.Buffer
-	buf.Write((&dataFrame{Length: 6}).Append(nil))
-	buf.Write([]byte("foobar"))
-	_, err = str.Write(buf.Bytes())
+	_, err = str.Write(data)
 	require.NoError(t, err)
 	require.NoError(t, str.Close())
 
@@ -264,7 +270,7 @@ func TestServerFirstFrameNotHeaders(t *testing.T) {
 		err := context.Cause(clientConn.Context())
 		var appErr *quic.ApplicationError
 		require.ErrorAs(t, err, &appErr)
-		require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), appErr.ErrorCode)
+		require.Equal(t, quic.ApplicationErrorCode(expectedErr), appErr.ErrorCode)
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}

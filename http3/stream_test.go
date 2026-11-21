@@ -105,21 +105,37 @@ func TestStreamInvalidFrame(t *testing.T) {
 		name string
 		data []byte
 		err  string
+		code ErrCode
 	}{
 		{
 			name: "unexpected frame",
 			data: (&settingsFrame{}).Append(nil),
 			err:  "peer sent an unexpected frame",
+			code: ErrCodeFrameUnexpected,
 		},
 		{
 			name: "DATA after trailers",
 			data: slices.Concat(trailers, getDataFrame([]byte("foo"))),
 			err:  "DATA frame received after trailers",
+			code: ErrCodeFrameUnexpected,
 		},
 		{
 			name: "HEADERS after trailers",
 			data: slices.Concat(trailers, trailers),
 			err:  "additional HEADERS frame received after trailers",
+			code: ErrCodeFrameUnexpected,
+		},
+		{
+			name: "truncated DATA",
+			data: getDataFrame([]byte("foobar"))[:5],
+			err:  "unexpected EOF",
+			code: ErrCodeFrameError,
+		},
+		{
+			name: "truncated trailers",
+			data: (&headersFrame{Length: 3}).Append(nil),
+			err:  "unexpected EOF",
+			code: ErrCodeFrameError,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -135,7 +151,10 @@ func TestStreamInvalidFrame(t *testing.T) {
 				qstr,
 				newRawConn(clientConn, false, nil, nopControlStrHandler, nil, nil),
 				nil,
-				func(io.Reader, *headersFrame) error { return nil },
+				func(r io.Reader, hf *headersFrame) error {
+					_, err := readHeaderBlock(r, hf.Length)
+					return err
+				},
 				nil,
 			)
 
@@ -146,7 +165,7 @@ func TestStreamInvalidFrame(t *testing.T) {
 			case <-serverConn.Context().Done():
 				var appErr *quic.ApplicationError
 				require.ErrorAs(t, context.Cause(serverConn.Context()), &appErr)
-				require.Equal(t, quic.ApplicationErrorCode(ErrCodeFrameUnexpected), appErr.ErrorCode)
+				require.Equal(t, quic.ApplicationErrorCode(tc.code), appErr.ErrorCode)
 			case <-time.After(time.Second):
 				t.Fatal("timeout")
 			}
