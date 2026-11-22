@@ -520,7 +520,6 @@ func (s *RequestStream) TryWriteAll(b []byte) error {
 
 // Close closes the send-direction of the stream.
 // It does not close the receive-direction of the stream.
-// If a Write failed partway through a DATA frame, the send-direction is reset instead.
 func (s *RequestStream) Close() error {
 	return s.str.Close()
 }
