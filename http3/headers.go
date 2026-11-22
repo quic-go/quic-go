@@ -507,13 +507,12 @@ func decodeTrailers(r io.Reader, str *stateTrackingStream, hf *headersFrame, max
 		return nil, err
 	}
 	decodeFn := decoder.Decode(b)
-	var fields []qpack.HeaderField
-	var headerFields *[]qpack.HeaderField
+	var fields *[]qpack.HeaderField
 	if qlogger != nil {
-		fields = make([]qpack.HeaderField, 0, 16)
-		headerFields = &fields
+		f := make([]qpack.HeaderField, 0, 16)
+		fields = &f
 	}
-	trailers, err := parseTrailers(decodeFn, maxHeaderBytes, headerFields)
+	trailers, err := parseTrailers(decodeFn, maxHeaderBytes, fields)
 	if err != nil {
 		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
 		// Malformed trailers are a stream error of type H3_MESSAGE_ERROR.
@@ -526,7 +525,7 @@ func decodeTrailers(r io.Reader, str *stateTrackingStream, hf *headersFrame, max
 		return nil, err
 	}
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, fields, nil)
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, *fields, nil)
 	}
 	return trailers, nil
 }

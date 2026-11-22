@@ -154,13 +154,14 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 		_ = str.SetReadDeadline(time.Time{})
 	}
 	decodeFn := decoder.Decode(headerBlock)
-	var hfs []qpack.HeaderField
+	var fields *[]qpack.HeaderField
 	if qlogger != nil {
-		hfs = make([]qpack.HeaderField, 0, 16)
+		f := make([]qpack.HeaderField, 0, 16)
+		fields = &f
 	}
-	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, &hfs)
+	req, err := requestFromHeaders(decodeFn, maxHeaderBytes, fields)
 	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, hfs, err)
+		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, *fields, err)
 	}
 	if err != nil {
 		if errors.Is(err, errHeaderTooLarge) {
