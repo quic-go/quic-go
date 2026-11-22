@@ -41,6 +41,14 @@ var (
 	errHeadersFrameTooLarge = errors.New("http3: HEADERS frame too large")
 )
 
+// decodeErrorCode is the stream error code for a header section that failed to decode.
+func decodeErrorCode(err error) quic.StreamErrorCode {
+	if _, ok := errors.AsType[*qpackError](err); ok {
+		return quic.StreamErrorCode(ErrCodeQPACKDecompressionFailed)
+	}
+	return quic.StreamErrorCode(ErrCodeMessageError)
+}
+
 // readHeaderBlock preallocates up to 8 KiB, growing larger buffers as data arrives.
 // The caller must check length against the configured header size limit first.
 func readHeaderBlock(r io.Reader, length uint64) ([]byte, error) {
