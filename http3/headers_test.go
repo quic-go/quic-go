@@ -831,7 +831,7 @@ func TestResponseTrailerParsingValidation(t *testing.T) {
 	}
 }
 
-func TestDecodeTrailersReset(t *testing.T) {
+func TestReadTrailerReset(t *testing.T) {
 	decode := func(t *testing.T, fields ...qpack.HeaderField) *stateTrackingStream {
 		client, server := newStreamPair(t)
 		var b bytes.Buffer
@@ -839,10 +839,10 @@ func TestDecodeTrailersReset(t *testing.T) {
 		for _, f := range fields {
 			require.NoError(t, enc.WriteField(f))
 		}
-		_, err := server.Write(b.Bytes())
+		_, err := server.Write(slices.Concat((&headersFrame{Length: uint64(b.Len())}).Append(nil), b.Bytes()))
 		require.NoError(t, err)
 		str := newStateTrackingStream(client, &mockStreamClearer{}, nil)
-		_, err = decodeTrailers(str, str, &headersFrame{Length: uint64(b.Len())}, newRawConn(nil, false, 1000, nil, nil, nil, nil), nil)
+		_, err = newStream(str, newRawConn(nil, false, 1000, nil, nil, nil, nil), nil, nil).Read([]byte{0})
 		require.Error(t, err)
 		return str
 	}

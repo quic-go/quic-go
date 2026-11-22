@@ -159,22 +159,13 @@ func (c *ClientConn) openRequestStream(ctx context.Context, reqDone chan<- struc
 	}
 
 	hstr := c.rawConn.TrackStream(str)
-	rsp := &http.Response{}
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
-		newStream(hstr, c.rawConn, trace, func(r io.Reader, hf *headersFrame) error {
-			hdr, err := decodeTrailers(r, hstr, hf, c.rawConn, c.qlogger)
-			if err != nil {
-				return err
-			}
-			rsp.Trailer = hdr
-			return nil
-		}, c.qlogger),
+		newStream(hstr, c.rawConn, trace, c.qlogger),
 		c.rawConn,
 		c.requestWriter,
 		reqDone,
 		c.disableCompression,
-		rsp,
 	), nil
 }
 

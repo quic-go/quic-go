@@ -93,14 +93,18 @@ func (c *rawConn) ReadRequestHeader(r io.Reader, hf *headersFrame, fields *[]qpa
 	return requestFromHeaders(c.decoder.Decode(b), c.maxFieldSectionSize, fields)
 }
 
-// ReadResponseHeader reads and decodes the response header section of hf from r into rsp.
+// ReadResponseHeader reads and decodes the response header section of hf from r.
 // A non-nil fields collects the decoded fields.
-func (c *rawConn) ReadResponseHeader(r io.Reader, hf *headersFrame, rsp *http.Response, fields *[]qpack.HeaderField) error {
+func (c *rawConn) ReadResponseHeader(r io.Reader, hf *headersFrame, fields *[]qpack.HeaderField) (*http.Response, error) {
 	b, err := c.readFieldSection(r, hf)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return updateResponseFromHeaders(rsp, c.decoder.Decode(b), c.maxFieldSectionSize, fields)
+	rsp := &http.Response{}
+	if err := updateResponseFromHeaders(rsp, c.decoder.Decode(b), c.maxFieldSectionSize, fields); err != nil {
+		return nil, err
+	}
+	return rsp, nil
 }
 
 // ReadTrailer reads and decodes the trailer section of hf from r.

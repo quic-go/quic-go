@@ -174,14 +174,11 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	if _, ok := req.Header["Content-Length"]; ok && req.ContentLength >= 0 {
 		contentLength = req.ContentLength
 	}
-	hstr := newServerStream(str, conn, func(r io.Reader, hf *headersFrame) error {
-		trailers, err := decodeTrailers(r, str, hf, conn, qlogger)
-		if err != nil {
-			return err
-		}
-		req.Trailer = trailers
-		return nil
-	}, qlogger)
+	ctx, cancel := context.WithCancel(connCtx)
+	req = req.WithContext(ctx)
+	context.AfterFunc(str.Context(), cancel)
+
+	hstr := newServerStream(str, conn, qlogger)
 
 	// We only use the client's priority for local scheduling.
 	// A Priority response header is only transmitted so that potential intermediaries can use it,
@@ -197,16 +194,13 @@ func (c *RawServerConn) handleRequestStream(str *stateTrackingStream) {
 	}
 	hstr.SetPriority(urgency, incremental)
 
-	body := newRequestBody(hstr, contentLength, connCtx, conn.ReceivedSettings(), conn.Settings)
+	// The body stores the trailers in the request passed to the handler.
+	body := newRequestBody(hstr, contentLength, &req.Trailer, connCtx, conn.ReceivedSettings(), conn.Settings)
 	req.Body = body
 
 	if c.logger != nil {
 		c.logger.Debug("handling request", "method", req.Method, "host", req.Host, "uri", req.RequestURI)
 	}
-
-	ctx, cancel := context.WithCancel(connCtx)
-	req = req.WithContext(ctx)
-	context.AfterFunc(str.Context(), cancel)
 
 	r := newResponseWriter(hstr, conn, req.Method, c.logger)
 	handler := c.requestHandler
@@ -301,7 +295,7 @@ func (c *RawServerConn) handleControlStream(_ *quic.ReceiveStream, fp *framePars
 }
 
 func (c *RawServerConn) rejectWithHeaderFieldsTooLarge(str *stateTrackingStream) {
-	hstr := newServerStream(str, c.rawConn, nil, c.qlogger)
+	hstr := newServerStream(str, c.rawConn, c.qlogger)
 	defer hstr.Close()
 	r := newResponseWriter(hstr, c.rawConn, "", c.logger)
 	r.WriteHeader(http.StatusRequestHeaderFieldsTooLarge)
