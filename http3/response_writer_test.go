@@ -326,13 +326,26 @@ func TestResponseWriterConnect(t *testing.T) {
 	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
 	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodConnect, nil)
+	rw.Header().Set(http.TrailerPrefix+"Foo", "bar")
 	_, err := rw.Write([]byte("foobar"))
 	require.NoError(t, err)
 	require.NoError(t, rw.Finish())
+	rw.flushTrailers()
 
 	fields := decodeHeader(t, &buf)
 	require.Equal(t, []string{"200"}, fields[":status"])
 	require.NotContains(t, fields, "content-length")
+	// a 2xx response starts a tunnel, so no trailers follow the body
+	require.Equal(t, getDataFrame([]byte("foobar")), buf.Next(buf.Len()))
+
+	// a non-2xx response doesn't start a tunnel, so trailers are sent
+	rw = newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodConnect, nil)
+	rw.Header().Set(http.TrailerPrefix+"Foo", "bar")
+	rw.WriteHeader(http.StatusNotFound)
+	require.NoError(t, rw.Finish())
+	rw.flushTrailers()
+	require.Equal(t, []string{"404"}, decodeHeader(t, &buf)[":status"])
+	require.Equal(t, []string{"bar"}, decodeHeader(t, &buf)["foo"])
 }
 
 func TestResponseWriterContentLengthRetry(t *testing.T) {

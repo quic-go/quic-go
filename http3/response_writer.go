@@ -301,7 +301,8 @@ func (w *responseWriter) Finish() error {
 }
 
 func (w *responseWriter) flushTrailers() {
-	if w.trailerWritten {
+	// A 2xx response to CONNECT starts a tunnel that only carries DATA frames (section 4.4 of RFC 9114).
+	if w.trailerWritten || (w.isConnect && w.status >= 200 && w.status < 300) {
 		return
 	}
 	if err := w.writeTrailers(); err != nil {
