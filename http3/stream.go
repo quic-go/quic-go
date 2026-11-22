@@ -370,6 +370,17 @@ func (s *Stream) TryWriteAll(b []byte) error {
 	return nil
 }
 
+// Close closes the send-direction of the stream.
+// If a Write failed partway through a DATA frame, it resets the send-direction instead,
+// since a stream must not end with a truncated frame.
+func (s *Stream) Close() error {
+	if s.hasUnfinishedFrame() {
+		s.CancelWrite(quic.StreamErrorCode(ErrCodeRequestCanceled))
+		return errors.New("http3: stream reset after a Write failed partway through a DATA frame")
+	}
+	return s.datagramStream.Close()
+}
+
 // writeHeader writes b, the unwritten part of a HEADERS frame.
 // DATA frames can be written once the final response header was written.
 func (s *Stream) writeHeader(b []byte, final bool) (int, error) {
