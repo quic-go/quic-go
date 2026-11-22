@@ -410,7 +410,6 @@ func validExtendedConnectProtocol(protocol string) bool {
 // updateResponseFromHeaders sets up http.Response as an HTTP/3 response,
 // using the decoded qpack header filed.
 // It is only called for the HTTP header (and not the HTTP trailer).
-// It takes an http.Response as an argument to allow the caller to set the trailer later on.
 func updateResponseFromHeaders(rsp *http.Response, decodeFn qpack.DecodeFunc, sizeLimit int, headerFields *[]qpack.HeaderField) error {
 	hdr, err := parseHeaders(decodeFn, false, sizeLimit, headerFields)
 	if err != nil {
@@ -502,35 +501,4 @@ func writeTrailers(wr io.Writer, trailers http.Header, streamID quic.StreamID, q
 	}
 	_, err := wr.Write(b)
 	return true, err
-}
-
-// decodeTrailers reads the header block of hf from r and decodes the trailers.
-func decodeTrailers(r io.Reader, str *stateTrackingStream, hf *headersFrame, conn *rawConn, qlogger qlogwriter.Recorder) (http.Header, error) {
-	var fields *[]qpack.HeaderField
-	if qlogger != nil {
-		f := make([]qpack.HeaderField, 0, 16)
-		fields = &f
-	}
-	trailers, err := conn.ReadTrailer(r, hf, fields)
-	if _, ok := errors.AsType[*fieldSectionReadError](err); ok {
-		if errors.Is(err, errHeadersFrameTooLarge) {
-			maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
-		}
-		return nil, err
-	}
-	if err != nil {
-		maybeQlogInvalidHeadersFrame(qlogger, str.StreamID(), hf.Length)
-		// Malformed trailers are a stream error of type H3_MESSAGE_ERROR.
-		// Trailers exceeding the size limit are not malformed.
-		_, isQPACKErr := errors.AsType[*qpackError](err)
-		if !isQPACKErr && !errors.Is(err, errHeaderTooLarge) {
-			str.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
-			str.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
-		}
-		return nil, err
-	}
-	if qlogger != nil {
-		qlogParsedHeadersFrame(qlogger, str.StreamID(), hf, *fields, nil)
-	}
-	return trailers, nil
 }

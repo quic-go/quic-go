@@ -87,7 +87,7 @@ func newTestResponseWriter(t *testing.T) *testResponseWriter {
 	clientConn, _ := newConnPair(t)
 	conn := newRawConn(clientConn, false, 0, nil, nopControlStrHandler, &eventRecorder, nil)
 	rw := newResponseWriter(
-		newServerStream(str, conn, func(io.Reader, *headersFrame) error { return nil }, &eventRecorder),
+		newServerStream(str, conn, &eventRecorder),
 		nil,
 		http.MethodGet,
 		slog.Default(),
@@ -243,7 +243,7 @@ func TestResponseWriterHeaderRetry(t *testing.T) {
 		}),
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes(),
 	)
-	str := newServerStream(qstr, nil, nil, nil)
+	str := newServerStream(qstr, nil, nil)
 	rw := newResponseWriter(str, nil, http.MethodGet, nil)
 	rw.Header().Set("Foo", "bar")
 	rw.WriteHeader(http.StatusOK)
@@ -273,7 +273,7 @@ func TestResponseWriterDataRetry(t *testing.T) {
 		return 1, os.ErrDeadlineExceeded
 	})
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil), nil, http.MethodGet, nil)
 	_, err := rw.Write([]byte("foo")) // buffered
 	require.NoError(t, err)
 
@@ -325,7 +325,7 @@ func TestResponseWriterConnect(t *testing.T) {
 	qstr := NewMockDatagramStream(mockCtrl)
 	qstr.EXPECT().StreamID().Return(quic.StreamID(42)).AnyTimes()
 	qstr.EXPECT().Write(gomock.Any()).DoAndReturn(buf.Write).AnyTimes()
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodConnect, nil)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil), nil, http.MethodConnect, nil)
 	rw.Header().Set(http.TrailerPrefix+"Foo", "bar")
 	_, err := rw.Write([]byte("foobar"))
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestResponseWriterConnect(t *testing.T) {
 	require.Equal(t, getDataFrame([]byte("foobar")), buf.Next(buf.Len()))
 
 	// a non-2xx response doesn't start a tunnel, so trailers are sent
-	rw = newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodConnect, nil)
+	rw = newResponseWriter(newStream(qstr, nil, nil, nil), nil, http.MethodConnect, nil)
 	rw.Header().Set(http.TrailerPrefix+"Foo", "bar")
 	rw.WriteHeader(http.StatusNotFound)
 	require.NoError(t, rw.Finish())
@@ -357,7 +357,7 @@ func TestResponseWriterContentLengthRetry(t *testing.T) {
 		qstr.EXPECT().Write(gomock.Any()).Return(0, os.ErrDeadlineExceeded),
 		qstr.EXPECT().Write(gomock.Any()).DoAndReturn(io.Discard.Write).AnyTimes(),
 	)
-	rw := newResponseWriter(newStream(qstr, nil, nil, nil, nil), nil, http.MethodGet, nil)
+	rw := newResponseWriter(newStream(qstr, nil, nil, nil), nil, http.MethodGet, nil)
 	rw.Header().Set("Content-Length", strconv.Itoa(maxSmallResponseSize))
 
 	data := make([]byte, maxSmallResponseSize)

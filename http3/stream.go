@@ -47,7 +47,7 @@ type Stream struct {
 
 	qlogger qlogwriter.Recorder
 
-	parseTrailer  func(io.Reader, *headersFrame) error
+	trailer       http.Header // nil unless a trailer section was received
 	parsedTrailer bool
 
 	missingHeader bool // set until the response header was written: DATA frames can't be written before it
@@ -57,14 +57,12 @@ func newStream(
 	str datagramStream,
 	conn *rawConn,
 	trace *httptrace.ClientTrace,
-	parseTrailer func(io.Reader, *headersFrame) error,
 	qlogger qlogwriter.Recorder,
 ) *Stream {
 	return &Stream{
 		datagramStream: str,
 		conn:           conn,
 		qlogger:        qlogger,
-		parseTrailer:   parseTrailer,
 		frameParser: &frameParser{
 			r:         &tracingReader{Reader: str, trace: trace},
 			streamID:  str.StreamID(),
@@ -74,13 +72,8 @@ func newStream(
 }
 
 // newServerStream creates a stream that only writes DATA frames once the response header was written.
-func newServerStream(
-	str datagramStream,
-	conn *rawConn,
-	parseTrailer func(io.Reader, *headersFrame) error,
-	qlogger qlogwriter.Recorder,
-) *Stream {
-	s := newStream(str, conn, nil, parseTrailer, qlogger)
+func newServerStream(str datagramStream, conn *rawConn, qlogger qlogwriter.Recorder) *Stream {
+	s := newStream(str, conn, nil, qlogger)
 	s.missingHeader = true
 	return s
 }
@@ -116,7 +109,7 @@ func (s *Stream) Read(b []byte) (int, error) {
 					return 0, errors.New("additional HEADERS frame received after trailers")
 				}
 				s.parsedTrailer = true
-				return 0, maybeReplaceError(s.parseTrailer(s.frameParser, f))
+				return 0, maybeReplaceError(s.readTrailer(f))
 			default:
 				s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
 				// parseNextFrame skips over unknown frame types
@@ -128,6 +121,43 @@ func (s *Stream) Read(b []byte) (int, error) {
 
 	n, err := s.frameParser.Read(b)
 	return n, maybeReplaceError(err)
+}
+
+// readTrailer reads and decodes the trailer section of hf.
+func (s *Stream) readTrailer(hf *headersFrame) error {
+	var fields *[]qpack.HeaderField
+	if s.qlogger != nil {
+		f := make([]qpack.HeaderField, 0, 16)
+		fields = &f
+	}
+	trailer, err := s.conn.ReadTrailer(s.frameParser, hf, fields)
+	if _, ok := errors.AsType[*fieldSectionReadError](err); ok {
+		if errors.Is(err, errHeadersFrameTooLarge) {
+			maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), hf.Length)
+		}
+		return err
+	}
+	if err != nil {
+		maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), hf.Length)
+		// Malformed trailers are a stream error of type H3_MESSAGE_ERROR.
+		// Trailers exceeding the size limit are not malformed.
+		_, isQPACKErr := errors.AsType[*qpackError](err)
+		if !isQPACKErr && !errors.Is(err, errHeaderTooLarge) {
+			s.CancelRead(quic.StreamErrorCode(ErrCodeMessageError))
+			s.CancelWrite(quic.StreamErrorCode(ErrCodeMessageError))
+		}
+		return err
+	}
+	if s.qlogger != nil {
+		qlogParsedHeadersFrame(s.qlogger, s.StreamID(), hf, *fields, nil)
+	}
+	s.trailer = trailer
+	return nil
+}
+
+// receivedTrailer returns the trailer section, or nil if none was received.
+func (s *Stream) receivedTrailer() http.Header {
+	return s.trailer
 }
 
 func (s *Stream) hasMoreData() bool {
@@ -308,7 +338,6 @@ type RequestStream struct {
 	requestWriter      *requestWriter
 	reqDone            chan<- struct{}
 	disableCompression bool
-	response           *http.Response
 
 	sentRequest   bool
 	requestedGzip bool
@@ -322,7 +351,6 @@ func newRequestStream(
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
 	disableCompression bool,
-	rsp *http.Response,
 ) *RequestStream {
 	return &RequestStream{
 		str:                str,
@@ -330,7 +358,6 @@ func newRequestStream(
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
 		disableCompression: disableCompression,
-		response:           rsp,
 	}
 }
 
@@ -514,8 +541,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		f := make([]qpack.HeaderField, 0, 16)
 		fields = &f
 	}
-	res := s.response
-	err = s.conn.ReadResponseHeader(s.str.frameParser, hf, res, fields)
+	res, err := s.conn.ReadResponseHeader(s.str.frameParser, hf, fields)
 	if _, ok := errors.AsType[*fieldSectionReadError](err); ok {
 		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
 		if errors.Is(err, errHeadersFrameTooLarge) {
@@ -555,7 +581,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	if isSuccessfulConnect {
 		contentLength = -1
 	}
-	respBody := newResponseBody(s.str, contentLength, s.reqDone)
+	respBody := newResponseBody(s.str, contentLength, &res.Trailer, s.reqDone)
 
 	// Rules for when to set Content-Length are defined in https://tools.ietf.org/html/rfc7230#section-3.3.2.
 	if (isInformational || isNoContent || isSuccessfulConnect) && res.ContentLength == -1 {
