@@ -49,6 +49,7 @@ type Stream struct {
 
 	trailer       http.Header // nil unless a trailer section was received
 	parsedTrailer bool
+	onlyData      bool // set once only DATA frames are allowed
 
 	missingHeader bool // set until the response header was written: DATA frames can't be written before it
 }
@@ -103,6 +104,13 @@ func (s *Stream) Read(b []byte) (int, error) {
 				}
 				break parseLoop
 			case *headersFrame:
+				// Once the CONNECT method has completed, only DATA frames are allowed,
+				// and a HEADERS frame is a connection error of type H3_FRAME_UNEXPECTED (RFC 9114, Section 4.4).
+				if s.onlyData {
+					maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), f.Length)
+					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+					return 0, errors.New("HEADERS frame received on a CONNECT stream")
+				}
 				if s.parsedTrailer {
 					maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), f.Length)
 					s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
@@ -153,6 +161,11 @@ func (s *Stream) readTrailer(hf *headersFrame) error {
 	}
 	s.trailer = trailer
 	return nil
+}
+
+// rejectTrailer makes Read treat a HEADERS frame as a connection error of type H3_FRAME_UNEXPECTED.
+func (s *Stream) rejectTrailer() {
+	s.onlyData = true
 }
 
 // receivedTrailer returns the trailer section, or nil if none was received.
@@ -580,6 +593,7 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	// Its Content-Length must be ignored, see section 9.3.6 of RFC 9110.
 	if isSuccessfulConnect {
 		contentLength = -1
+		s.str.rejectTrailer()
 	}
 	respBody := newResponseBody(s.str, contentLength, &res.Trailer, s.reqDone)
 
