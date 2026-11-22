@@ -82,12 +82,12 @@ func (c *MockStreamFrameGetterpopRetransmissionFrameCall) DoAndReturn(f func(pro
 }
 
 // popStreamFrame mocks base method.
-func (m *MockStreamFrameGetter) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+func (m *MockStreamFrameGetter) popStreamFrame(arg0 protocol.ByteCount, arg1 protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "popStreamFrame", arg0, arg1)
 	ret0, _ := ret[0].(ackhandler.StreamFrame)
 	ret1, _ := ret[1].(*wire.StreamDataBlockedFrame)
-	ret2, _ := ret[2].(bool)
+	ret2, _ := ret[2].(sendState)
 	return ret0, ret1, ret2
 }
 
@@ -104,19 +104,19 @@ type MockStreamFrameGetterpopStreamFrameCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockStreamFrameGetterpopStreamFrameCall) Return(arg0 ackhandler.StreamFrame, arg1 *wire.StreamDataBlockedFrame, hasMoreData bool) *MockStreamFrameGetterpopStreamFrameCall {
-	c.Call = c.Call.Return(arg0, arg1, hasMoreData)
+func (c *MockStreamFrameGetterpopStreamFrameCall) Return(arg0 ackhandler.StreamFrame, arg1 *wire.StreamDataBlockedFrame, arg2 sendState) *MockStreamFrameGetterpopStreamFrameCall {
+	c.Call = c.Call.Return(arg0, arg1, arg2)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockStreamFrameGetterpopStreamFrameCall) Do(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool)) *MockStreamFrameGetterpopStreamFrameCall {
+func (c *MockStreamFrameGetterpopStreamFrameCall) Do(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState)) *MockStreamFrameGetterpopStreamFrameCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockStreamFrameGetterpopStreamFrameCall) DoAndReturn(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool)) *MockStreamFrameGetterpopStreamFrameCall {
+func (c *MockStreamFrameGetterpopStreamFrameCall) DoAndReturn(f func(protocol.ByteCount, protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState)) *MockStreamFrameGetterpopStreamFrameCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

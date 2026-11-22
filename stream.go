@@ -224,7 +224,7 @@ func (s *Stream) enableResetStreamAt() {
 	s.sendStr.enableResetStreamAt()
 }
 
-func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (_ ackhandler.StreamFrame, _ *wire.StreamDataBlockedFrame, hasMore bool) {
+func (s *Stream) popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 	return s.sendStr.popStreamFrame(maxBytes, v)
 }
 
