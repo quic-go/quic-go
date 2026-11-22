@@ -163,6 +163,62 @@ func (s *Stream) readTrailer(hf *headersFrame) error {
 	return nil
 }
 
+// nextHeadersFrame parses the frame that starts a request or response, which must be a HEADERS frame.
+// On error, it resets the stream with errCode or closes the connection.
+func (s *Stream) nextHeadersFrame(errCode ErrCode) (*headersFrame, error) {
+	frame, err := s.frameParser.ParseNext(s.qlogger)
+	if err != nil {
+		if errors.Is(err, errPriorityUpdateForPush) {
+			s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
+			return nil, err
+		}
+		s.CancelRead(quic.StreamErrorCode(errCode))
+		s.CancelWrite(quic.StreamErrorCode(errCode))
+		return nil, fmt.Errorf("http3: parsing frame failed: %w", maybeReplaceError(err))
+	}
+	hf, ok := frame.(*headersFrame)
+	if !ok {
+		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
+		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
+	}
+	return hf, nil
+}
+
+// readResponseHeader reads a response header, informational or final.
+// On error, it resets the stream or closes the connection.
+func (s *Stream) readResponseHeader() (*http.Response, error) {
+	hf, err := s.nextHeadersFrame(ErrCodeFrameError)
+	if err != nil {
+		return nil, err
+	}
+	var fields *[]qpack.HeaderField
+	if s.qlogger != nil {
+		f := make([]qpack.HeaderField, 0, 16)
+		fields = &f
+	}
+	rsp, err := s.conn.ReadResponseHeader(s.frameParser, hf, fields)
+	if _, ok := errors.AsType[*fieldSectionReadError](err); ok {
+		maybeQlogInvalidHeadersFrame(s.qlogger, s.StreamID(), hf.Length)
+		if errors.Is(err, errHeadersFrameTooLarge) {
+			s.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
+			s.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
+			return nil, err
+		}
+		s.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		s.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		return nil, fmt.Errorf("http3: failed to read response headers: %w", maybeReplaceError(err))
+	}
+	if s.qlogger != nil {
+		qlogParsedHeadersFrame(s.qlogger, s.StreamID(), hf, *fields, err)
+	}
+	if err != nil {
+		s.CancelRead(decodeErrorCode(err))
+		s.CancelWrite(decodeErrorCode(err))
+		return nil, fmt.Errorf("http3: invalid response: %w", err)
+	}
+	return rsp, nil
+}
+
 // rejectTrailer makes Read treat a HEADERS frame as a connection error of type H3_FRAME_UNEXPECTED.
 func (s *Stream) rejectTrailer() {
 	s.onlyData = true
@@ -534,49 +590,9 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 	if !s.sentRequest {
 		return nil, errors.New("http3: invalid use of RequestStream.ReadResponse before SendRequestHeader")
 	}
-	frame, err := s.str.frameParser.ParseNext(s.str.qlogger)
+	res, err := s.str.readResponseHeader()
 	if err != nil {
-		if errors.Is(err, errPriorityUpdateForPush) {
-			s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "")
-			return nil, err
-		}
-		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
-		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
-		return nil, fmt.Errorf("http3: parsing frame failed: %w", maybeReplaceError(err))
-	}
-	hf, ok := frame.(*headersFrame)
-	if !ok {
-		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
-		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
-	}
-	var fields *[]qpack.HeaderField
-	if s.str.qlogger != nil {
-		f := make([]qpack.HeaderField, 0, 16)
-		fields = &f
-	}
-	res, err := s.conn.ReadResponseHeader(s.str.frameParser, hf, fields)
-	if _, ok := errors.AsType[*fieldSectionReadError](err); ok {
-		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
-		if errors.Is(err, errHeadersFrameTooLarge) {
-			s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
-			s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
-			return nil, err
-		}
-		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		return nil, fmt.Errorf("http3: failed to read response headers: %w", maybeReplaceError(err))
-	}
-	if s.str.qlogger != nil {
-		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, *fields, err)
-	}
-	if err != nil {
-		errCode := ErrCodeMessageError
-		if _, ok := errors.AsType[*qpackError](err); ok {
-			errCode = ErrCodeQPACKDecompressionFailed
-		}
-		s.str.CancelRead(quic.StreamErrorCode(errCode))
-		s.str.CancelWrite(quic.StreamErrorCode(errCode))
-		return nil, fmt.Errorf("http3: invalid response: %w", err)
+		return nil, err
 	}
 
 	isInformational := res.StatusCode >= 100 && res.StatusCode < 200
