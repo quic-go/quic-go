@@ -212,7 +212,7 @@ func (c *ClientConn) handleControlStream(str *quic.ReceiveStream, fp *frameParse
 		c.goAwayCancel()
 		c.streamMx.Unlock()
 
-		hasActiveStreams := c.rawConn.hasActiveStreams()
+		hasActiveStreams := c.rawConn.HasActiveStreams()
 		// immediately close the connection if there are currently no active requests
 		if !hasActiveStreams {
 			c.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
@@ -229,6 +229,10 @@ func (c *ClientConn) onStreamsEmpty() {
 	if c.maxStreamID != invalidStreamID {
 		c.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeNoError), "")
 	}
+}
+
+func (c *ClientConn) hasActiveStreams() bool {
+	return c.rawConn.HasActiveStreams()
 }
 
 // RoundTrip executes a request and returns a response

@@ -212,7 +212,7 @@ func (c *rawConn) clearStream(id quic.StreamID) {
 	}
 }
 
-func (c *rawConn) hasActiveStreams() bool {
+func (c *rawConn) HasActiveStreams() bool {
 	c.streamMx.Lock()
 	defer c.streamMx.Unlock()
 

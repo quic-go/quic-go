@@ -732,6 +732,38 @@ func TestHTTPServerIdleTimeout(t *testing.T) {
 	})
 }
 
+func TestHTTPCloseIdleConnectionsUnreadBody(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := newTestNetwork(t)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+			io.WriteString(w, "Hello, World!\n")
+		})
+		port := startHTTPServer(t, n.NewConn(), mux)
+		var conn *quic.Conn
+		cl := newHTTP3Client(t, n, func(tr *http3.Transport) {
+			tr.Dial = func(ctx context.Context, addr string, tlsConf *tls.Config, conf *quic.Config) (*quic.Conn, error) {
+				c, err := n.DialEarly(ctx, addr, tlsConf, conf)
+				conn = c
+				return c, err
+			}
+		})
+		tr := cl.Transport.(*http3.Transport)
+
+		resp, err := cl.Get(fmt.Sprintf("https://localhost:%d/hello", port))
+		require.NoError(t, err)
+		// the response body wasn't read yet
+		tr.CloseIdleConnections()
+		require.NoError(t, conn.Context().Err())
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, "Hello, World!\n", string(body))
+
+		tr.CloseIdleConnections()
+		require.ErrorIs(t, context.Cause(conn.Context()), &quic.ApplicationError{ErrorCode: quic.ApplicationErrorCode(http3.ErrCodeNoError)})
+	})
+}
+
 func TestHTTPReestablishConnectionAfterDialError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		n := newTestNetwork(t)

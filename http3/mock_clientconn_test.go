@@ -155,3 +155,41 @@ func (c *MockClientConnhandleUnidirectionalStreamCall) DoAndReturn(f func(*quic.
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }
+
+// hasActiveStreams mocks base method.
+func (m *MockClientConn) hasActiveStreams() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "hasActiveStreams")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// hasActiveStreams indicates an expected call of hasActiveStreams.
+func (mr *MockClientConnMockRecorder) hasActiveStreams() *MockClientConnhasActiveStreamsCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "hasActiveStreams", reflect.TypeOf((*MockClientConn)(nil).hasActiveStreams))
+	return &MockClientConnhasActiveStreamsCall{Call: call}
+}
+
+// MockClientConnhasActiveStreamsCall wrap *gomock.Call
+type MockClientConnhasActiveStreamsCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockClientConnhasActiveStreamsCall) Return(arg0 bool) *MockClientConnhasActiveStreamsCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockClientConnhasActiveStreamsCall) Do(f func() bool) *MockClientConnhasActiveStreamsCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockClientConnhasActiveStreamsCall) DoAndReturn(f func() bool) *MockClientConnhasActiveStreamsCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}

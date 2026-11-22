@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -555,6 +556,7 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 				<-r.Context().Done()
 				return nil, nil
 			})
+			cl.EXPECT().hasActiveStreams().Return(false)
 			return cl
 		},
 	}
@@ -604,6 +606,27 @@ func TestTransportCloseIdleConnections(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+func TestTransportCloseIdleConnectionsInFlightDial(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dialErr := make(chan error, 1)
+		tr := &Transport{
+			Dial: func(ctx context.Context, _ string, _ *tls.Config, _ *quic.Config) (*quic.Conn, error) {
+				<-ctx.Done()
+				dialErr <- ctx.Err()
+				return nil, ctx.Err()
+			},
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := tr.RoundTrip(httptest.NewRequestWithContext(ctx, http.MethodGet, "https://quic-go.net", nil))
+		require.ErrorIs(t, err, context.Canceled)
+
+		// no request is waiting for the dial anymore
+		tr.CloseIdleConnections()
+		require.ErrorIs(t, <-dialErr, context.Canceled)
+	})
 }
 
 func TestTransportClose(t *testing.T) {
