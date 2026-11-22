@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"maps"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 
+	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3/qlog"
 	"github.com/quic-go/quic-go/qlogwriter"
@@ -31,6 +33,9 @@ type rawConn struct {
 	logger *slog.Logger
 
 	enableDatagrams bool
+
+	decoder             *qpack.Decoder
+	maxFieldSectionSize int // the SETTINGS_MAX_FIELD_SECTION_SIZE we send
 
 	streamMx sync.Mutex
 	streams  map[quic.StreamID]*stateTrackingStream
@@ -53,26 +58,70 @@ type rawConn struct {
 func newRawConn(
 	quicConn *quic.Conn,
 	enableDatagrams bool,
+	maxFieldSectionSize int,
 	onStreamsEmpty func(),
 	controlStrHandler func(*quic.ReceiveStream, *frameParser),
 	qlogger qlogwriter.Recorder,
 	logger *slog.Logger,
 ) *rawConn {
 	c := &rawConn{
-		conn:              quicConn,
-		logger:            logger,
-		enableDatagrams:   enableDatagrams,
-		receivedSettings:  make(chan struct{}),
-		streams:           make(map[quic.StreamID]*stateTrackingStream),
-		qlogger:           qlogger,
-		qloggerProducers:  1,
-		onStreamsEmpty:    onStreamsEmpty,
-		controlStrHandler: controlStrHandler,
+		conn:                quicConn,
+		logger:              logger,
+		enableDatagrams:     enableDatagrams,
+		decoder:             qpack.NewDecoder(),
+		maxFieldSectionSize: maxFieldSectionSize,
+		receivedSettings:    make(chan struct{}),
+		streams:             make(map[quic.StreamID]*stateTrackingStream),
+		qlogger:             qlogger,
+		qloggerProducers:    1,
+		onStreamsEmpty:      onStreamsEmpty,
+		controlStrHandler:   controlStrHandler,
 	}
 	if qlogger != nil {
 		context.AfterFunc(quicConn.Context(), c.RemoveQlogProducer)
 	}
 	return c
+}
+
+// ReadRequestHeader reads and decodes the request header section of hf from r.
+// A non-nil fields collects the decoded fields.
+func (c *rawConn) ReadRequestHeader(r io.Reader, hf *headersFrame, fields *[]qpack.HeaderField) (*http.Request, error) {
+	b, err := c.readFieldSection(r, hf)
+	if err != nil {
+		return nil, err
+	}
+	return requestFromHeaders(c.decoder.Decode(b), c.maxFieldSectionSize, fields)
+}
+
+// ReadResponseHeader reads and decodes the response header section of hf from r into rsp.
+// A non-nil fields collects the decoded fields.
+func (c *rawConn) ReadResponseHeader(r io.Reader, hf *headersFrame, rsp *http.Response, fields *[]qpack.HeaderField) error {
+	b, err := c.readFieldSection(r, hf)
+	if err != nil {
+		return err
+	}
+	return updateResponseFromHeaders(rsp, c.decoder.Decode(b), c.maxFieldSectionSize, fields)
+}
+
+// ReadTrailer reads and decodes the trailer section of hf from r.
+// A non-nil fields collects the decoded fields.
+func (c *rawConn) ReadTrailer(r io.Reader, hf *headersFrame, fields *[]qpack.HeaderField) (http.Header, error) {
+	b, err := c.readFieldSection(r, hf)
+	if err != nil {
+		return nil, err
+	}
+	return parseTrailers(c.decoder.Decode(b), c.maxFieldSectionSize, fields)
+}
+
+func (c *rawConn) readFieldSection(r io.Reader, hf *headersFrame) ([]byte, error) {
+	if hf.Length > uint64(c.maxFieldSectionSize) {
+		return nil, &fieldSectionReadError{fmt.Errorf("%w: %d bytes (max: %d)", errHeadersFrameTooLarge, hf.Length, c.maxFieldSectionSize)}
+	}
+	b, err := readHeaderBlock(r, hf.Length)
+	if err != nil {
+		return nil, &fieldSectionReadError{err}
+	}
+	return b, nil
 }
 
 func (c *rawConn) OpenUniStream() (*quic.SendStream, error) {

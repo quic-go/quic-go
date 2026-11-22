@@ -842,7 +842,7 @@ func TestDecodeTrailersReset(t *testing.T) {
 		_, err := server.Write(b.Bytes())
 		require.NoError(t, err)
 		str := newStateTrackingStream(client, &mockStreamClearer{}, nil)
-		_, err = decodeTrailers(str, str, &headersFrame{Length: uint64(b.Len())}, 1000, qpack.NewDecoder(), nil)
+		_, err = decodeTrailers(str, str, &headersFrame{Length: uint64(b.Len())}, newRawConn(nil, false, 1000, nil, nil, nil, nil), nil)
 		require.Error(t, err)
 		return str
 	}
