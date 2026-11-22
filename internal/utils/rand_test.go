@@ -4,6 +4,7 @@ import (
 	"math"
 	"strconv"
 	"testing"
+	"testing/cryptotest"
 
 	"github.com/stretchr/testify/require"
 )
@@ -15,6 +16,9 @@ func TestRandomNumbers(t *testing.T) {
 	require.Panics(t, func() { r.Uint32N(0) })
 	for _, max := range []uint32{1, 256, 12345678, 1<<31 + 1, math.MaxUint32} {
 		t.Run(strconv.FormatUint(uint64(max), 10), func(t *testing.T) {
+			// A fixed seed keeps the statistical check from flaking.
+			cryptotest.SetGlobalRandom(t, 1)
+
 			var values [num]uint32
 			for i := range num {
 				v := r.Uint32N(max)
