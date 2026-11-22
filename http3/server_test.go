@@ -591,7 +591,7 @@ func TestServerQlogClosedAfterHandlerReturns(t *testing.T) {
 		<-block
 	})
 	rec := &closeTrackingRecorder{closed: make(chan struct{})}
-	conn := newRawServerConn(serverConn, false, 0, rec, nil, context.Background(), handler, 0)
+	conn := newRawServerConn(serverConn, false, 0, rec, nil, context.Background(), handler, http.DefaultMaxHeaderBytes)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

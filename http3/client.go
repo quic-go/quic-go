@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quic-go/qpack"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/qlogwriter"
 )
@@ -51,15 +50,9 @@ type ClientConn struct {
 	conn    *quic.Conn
 	rawConn *rawConn
 
-	decoder *qpack.Decoder
-
 	// Additional HTTP/3 settings.
 	// It is invalid to specify any settings defined by RFC 9114 (HTTP/3) and RFC 9297 (HTTP Datagrams).
 	additionalSettings map[uint64]uint64
-
-	// maxResponseHeaderBytes specifies a limit on how many response bytes are
-	// allowed in the server's response header.
-	maxResponseHeaderBytes int
 
 	// disableCompression, if true, prevents the Transport from requesting compression with an
 	// "Accept-Encoding: gzip" request header when the Request contains no existing Accept-Encoding value.
@@ -100,18 +93,16 @@ func newClientConn(
 		maxStreamID:        invalidStreamID,
 		logger:             logger,
 		qlogger:            qlogger,
-		decoder:            qpack.NewDecoder(),
 	}
 	c.goAwayCtx, c.goAwayCancel = context.WithCancel(context.Background())
 	if maxResponseHeaderBytes <= 0 {
-		c.maxResponseHeaderBytes = defaultMaxResponseHeaderBytes
-	} else {
-		c.maxResponseHeaderBytes = maxResponseHeaderBytes
+		maxResponseHeaderBytes = defaultMaxResponseHeaderBytes
 	}
 	c.requestWriter = newRequestWriter()
 	c.rawConn = newRawConn(
 		conn,
 		enableDatagrams,
+		maxResponseHeaderBytes,
 		c.onStreamsEmpty,
 		c.handleControlStream,
 		qlogger,
@@ -122,7 +113,7 @@ func newClientConn(
 		_, err := c.rawConn.openControlStream(&settingsFrame{
 			Datagram:            enableDatagrams,
 			Other:               additionalSettings,
-			MaxFieldSectionSize: int64(c.maxResponseHeaderBytes),
+			MaxFieldSectionSize: int64(maxResponseHeaderBytes),
 		})
 		if err != nil {
 			if c.logger != nil {
@@ -137,16 +128,10 @@ func newClientConn(
 
 // OpenRequestStream opens a new request stream on the HTTP/3 connection.
 func (c *ClientConn) OpenRequestStream(ctx context.Context) (*RequestStream, error) {
-	return c.openRequestStream(ctx, c.requestWriter, nil, c.disableCompression, c.maxResponseHeaderBytes)
+	return c.openRequestStream(ctx, nil)
 }
 
-func (c *ClientConn) openRequestStream(
-	ctx context.Context,
-	requestWriter *requestWriter,
-	reqDone chan<- struct{},
-	disableCompression bool,
-	maxHeaderBytes int,
-) (*RequestStream, error) {
+func (c *ClientConn) openRequestStream(ctx context.Context, reqDone chan<- struct{}) (*RequestStream, error) {
 	// RFC 9114 Section 5.2 prohibits opening any new request streams after GOAWAY.
 	// The stream ID only identifies requests that were already in flight and might still be processed.
 	if c.goAwayCtx.Err() != nil {
@@ -178,7 +163,7 @@ func (c *ClientConn) openRequestStream(
 	trace := httptrace.ContextClientTrace(ctx)
 	return newRequestStream(
 		newStream(hstr, c.rawConn, trace, func(r io.Reader, hf *headersFrame) error {
-			hdr, err := decodeTrailers(r, hstr, hf, maxHeaderBytes, c.decoder, c.qlogger)
+			hdr, err := decodeTrailers(r, hstr, hf, c.rawConn, c.qlogger)
 			if err != nil {
 				return err
 			}
@@ -186,11 +171,9 @@ func (c *ClientConn) openRequestStream(
 			return nil
 		}, c.qlogger),
 		c.rawConn,
-		requestWriter,
+		c.requestWriter,
 		reqDone,
-		c.decoder,
-		disableCompression,
-		maxHeaderBytes,
+		c.disableCompression,
 		rsp,
 	), nil
 }
@@ -300,13 +283,7 @@ func (c *ClientConn) roundTrip(req *http.Request) (*http.Response, error) {
 	defer c.rawConn.RemoveQlogProducer()
 
 	reqDone := make(chan struct{})
-	str, err := c.openRequestStream(
-		req.Context(),
-		c.requestWriter,
-		reqDone,
-		c.disableCompression,
-		c.maxResponseHeaderBytes,
-	)
+	str, err := c.openRequestStream(req.Context(), reqDone)
 	if err != nil {
 		return nil, &errConnUnusable{e: err}
 	}

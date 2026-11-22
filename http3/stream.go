@@ -305,9 +305,7 @@ type RequestStream struct {
 
 	responseBody io.ReadCloser // set by ReadResponse
 
-	decoder            *qpack.Decoder
 	requestWriter      *requestWriter
-	maxHeaderBytes     int
 	reqDone            chan<- struct{}
 	disableCompression bool
 	response           *http.Response
@@ -323,9 +321,7 @@ func newRequestStream(
 	conn *rawConn,
 	requestWriter *requestWriter,
 	reqDone chan<- struct{},
-	decoder *qpack.Decoder,
 	disableCompression bool,
-	maxHeaderBytes int,
 	rsp *http.Response,
 ) *RequestStream {
 	return &RequestStream{
@@ -333,9 +329,7 @@ func newRequestStream(
 		conn:               conn,
 		requestWriter:      requestWriter,
 		reqDone:            reqDone,
-		decoder:            decoder,
 		disableCompression: disableCompression,
-		maxHeaderBytes:     maxHeaderBytes,
 		response:           rsp,
 	}
 }
@@ -515,27 +509,24 @@ func (s *RequestStream) ReadResponse() (*http.Response, error) {
 		s.conn.CloseWithError(quic.ApplicationErrorCode(ErrCodeFrameUnexpected), "expected first frame to be a HEADERS frame")
 		return nil, errors.New("http3: expected first frame to be a HEADERS frame")
 	}
-	if hf.Length > uint64(s.maxHeaderBytes) {
-		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
-		s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
-		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
-		return nil, fmt.Errorf("http3: HEADERS frame too large: %d bytes (max: %d)", hf.Length, s.maxHeaderBytes)
-	}
-	headerBlock, err := readHeaderBlock(s.str.frameParser, hf.Length)
-	if err != nil {
-		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
-		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
-		return nil, fmt.Errorf("http3: failed to read response headers: %w", maybeReplaceError(err))
-	}
-	decodeFn := s.decoder.Decode(headerBlock)
 	var fields *[]qpack.HeaderField
 	if s.str.qlogger != nil {
 		f := make([]qpack.HeaderField, 0, 16)
 		fields = &f
 	}
 	res := s.response
-	err = updateResponseFromHeaders(res, decodeFn, s.maxHeaderBytes, fields)
+	err = s.conn.ReadResponseHeader(s.str.frameParser, hf, res, fields)
+	if _, ok := errors.AsType[*fieldSectionReadError](err); ok {
+		maybeQlogInvalidHeadersFrame(s.str.qlogger, s.str.StreamID(), hf.Length)
+		if errors.Is(err, errHeadersFrameTooLarge) {
+			s.str.CancelRead(quic.StreamErrorCode(ErrCodeFrameError))
+			s.str.CancelWrite(quic.StreamErrorCode(ErrCodeFrameError))
+			return nil, err
+		}
+		s.str.CancelRead(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		s.str.CancelWrite(quic.StreamErrorCode(ErrCodeRequestIncomplete))
+		return nil, fmt.Errorf("http3: failed to read response headers: %w", maybeReplaceError(err))
+	}
 	if s.str.qlogger != nil {
 		qlogParsedHeadersFrame(s.str.qlogger, s.str.StreamID(), hf, *fields, err)
 	}
