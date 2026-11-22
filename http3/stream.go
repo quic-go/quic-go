@@ -610,6 +610,11 @@ func (s *RequestStream) sendRequestHeader(req *http.Request) error {
 	s.isConnect = req.Method == http.MethodConnect
 	s.isHead = req.Method == http.MethodHead
 	s.sentRequest = true
+	// HTTP Datagrams received for a request without datagram semantics abort the request (RFC 9297, Section 2).
+	// Only Extended CONNECT requests can define such semantics.
+	if !isExtendedConnectRequest(req) {
+		s.conn.RejectDatagrams(s.StreamID())
+	}
 	return maybeReplaceError(s.requestWriter.WriteRequestHeader(s.str.datagramStream, req, s.requestedGzip, s.str.StreamID(), s.str.qlogger))
 }
 

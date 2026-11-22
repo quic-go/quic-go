@@ -246,6 +246,25 @@ func TestStateTrackingStreamSendThenReceive(t *testing.T) {
 	require.Equal(t, &id, clearer.cleared)
 }
 
+func TestStateTrackingStreamRejectDatagrams(t *testing.T) {
+	client, server := newStreamPair(t)
+	str := newStateTrackingStream(client, &mockStreamClearer{}, func([]byte) error { return nil })
+	str.enqueueDatagram([]byte("foo"))
+	str.RejectDatagrams()
+	expectStreamReadReset(t, server, quic.StreamErrorCode(ErrCodeDatagramError))
+	expectStreamWriteReset(t, server, quic.StreamErrorCode(ErrCodeDatagramError))
+
+	// datagrams received after the peer closed the stream are dropped
+	client, server = newStreamPair(t)
+	str = newStateTrackingStream(client, &mockStreamClearer{}, func([]byte) error { return nil })
+	require.NoError(t, server.Close())
+	_, err := client.Read([]byte{0})
+	require.ErrorIs(t, err, io.EOF)
+	str.RejectDatagrams()
+	str.enqueueDatagram([]byte("foo"))
+	require.NoError(t, str.Context().Err())
+}
+
 func TestDatagramReceiving(t *testing.T) {
 	client, _ := newStreamPair(t)
 
