@@ -137,7 +137,7 @@ func testFramerStreamDataBlocked(t *testing.T, fits bool) {
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	framer.AddActiveStream(streamID, str)
 	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 			data := []byte("foobar")
 			if !fits {
 				// Leave 3 bytes in the packet.
@@ -149,7 +149,7 @@ func testFramerStreamDataBlocked(t *testing.T, fits bool) {
 			if !fits {
 				require.Greater(t, blocked.Length(protocol.Version1), protocol.ByteCount(3))
 			}
-			return ackhandler.StreamFrame{Frame: f}, blocked, false
+			return ackhandler.StreamFrame{Frame: f}, blocked, sendStateIdle
 		},
 	)
 
@@ -199,7 +199,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 	framer.AddActiveStream(streamID, str)
 
 	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 			data := []byte("foobar")
 			if !fits {
 				// Leave 2 bytes in the packet.
@@ -207,7 +207,7 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 				data = make([]byte, size-2)
 			}
 			f := &wire.StreamFrame{StreamID: streamID, DataLenPresent: true, Data: data}
-			return ackhandler.StreamFrame{Frame: f}, nil, false
+			return ackhandler.StreamFrame{Frame: f}, nil, sendStateIdle
 		},
 	)
 
@@ -225,6 +225,31 @@ func testFramerDataBlocked(t *testing.T, fits bool) {
 		require.Len(t, frames, 1)
 		require.Equal(t, &wire.DataBlockedFrame{MaximumData: offset}, frames[0].Frame)
 	}
+}
+
+func TestFramerConnectionBlocked(t *testing.T) {
+	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
+	str := NewMockStreamFrameGetter(gomock.NewController(t))
+	var generation uint32
+	str.EXPECT().priority().DoAndReturn(func() (int8, bool, uint32) { return defaultUrgency, true, generation }).AnyTimes()
+	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).Return(ackhandler.StreamFrame{}, nil, sendStateConnBlocked).Times(2)
+	block := func() {
+		require.True(t, framer.HasData())
+		framer.AppendStreamFrames(nil, nil, 1000, protocol.Version1)
+		require.False(t, framer.HasData())
+	}
+
+	framer.AddActiveStream(4, str)
+	block()
+	// the stream might now have data that doesn't need flow control credit, e.g. a FIN
+	framer.AddActiveStream(4, str)
+	block()
+	// the stream is queued with its new priority when it's unblocked
+	generation++
+	framer.UpdateStreamPriority(4)
+	require.False(t, framer.HasData())
+	framer.UpdateSendWindow(100)
+	require.True(t, framer.HasData())
 }
 
 func TestFramerDetectsFrameDoS(t *testing.T) {
@@ -312,10 +337,10 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	str1 := NewMockStreamFrameGetter(mockCtrl)
 	str1.EXPECT().priority().Return(defaultUrgency, true, uint32(0)).AnyTimes()
-	str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f1}, nil, true)
+	str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f1}, nil, sendStateReady)
 	str2 := NewMockStreamFrameGetter(mockCtrl)
 	str2.EXPECT().priority().Return(defaultUrgency, true, uint32(0)).AnyTimes()
-	str2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f2}, nil, false)
+	str2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f2}, nil, sendStateIdle)
 	framer.AddActiveStream(str1ID, str1)
 	framer.AddActiveStream(str1ID, str1) // duplicate calls are ok (they're no-ops)
 	framer.AddActiveStream(str2ID, str2)
@@ -341,7 +366,7 @@ func TestFramerAppendStreamFrames(t *testing.T) {
 	require.True(t, framer.HasData()) // the stream claimed to have more data...
 
 	// ... but it actually doesn't
-	str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{}, nil, false)
+	str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{}, nil, sendStateIdle)
 	_, fs, length = framer.AppendStreamFrames(nil, nil, protocol.MaxByteCount, protocol.Version1)
 	require.Empty(t, fs)
 	require.Zero(t, length)
@@ -368,7 +393,7 @@ func TestFramerPrioritizesStreamRetransmissions(t *testing.T) {
 	str1.EXPECT().popRetransmissionFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: firstRetransmission}, false)
 	str2.EXPECT().popRetransmissionFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: secondRetransmission}, true)
 	str2.EXPECT().popRetransmissionFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: thirdRetransmission}, false)
-	newDataStr.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: newData}, nil, false)
+	newDataStr.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: newData}, nil, sendStateIdle)
 
 	framer := newFramer(newConnectionFlowController(0, 0, nil, nil, nil))
 	require.False(t, framer.HasData())
@@ -441,11 +466,14 @@ func newMockPriorityStream(t *testing.T, id protocol.StreamID, urgency int8, inc
 	str.EXPECT().priority().Return(urgency, incremental, uint32(0)).AnyTimes()
 	remaining := numFrames
 	str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
-		func(_ protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+		func(_ protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 			frame := &wire.StreamFrame{StreamID: id, DataLenPresent: true}
 			frame.Data = make([]byte, frame.MaxDataLen(protocol.MinStreamFrameSize, v))
 			remaining--
-			return ackhandler.StreamFrame{Frame: frame}, nil, remaining > 0
+			if remaining > 0 {
+				return ackhandler.StreamFrame{Frame: frame}, nil, sendStateReady
+			}
+			return ackhandler.StreamFrame{Frame: frame}, nil, sendStateIdle
 		},
 	).Times(numFrames)
 	return str
@@ -504,11 +532,14 @@ func TestFramerSchedulesReprioritizedStream(t *testing.T) {
 	)
 	remaining := 2
 	updatedStr.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
-		func(_ protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+		func(_ protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 			frame := &wire.StreamFrame{StreamID: updatedStreamID, DataLenPresent: true}
 			frame.Data = make([]byte, frame.MaxDataLen(protocol.MinStreamFrameSize, v))
 			remaining--
-			return ackhandler.StreamFrame{Frame: frame}, nil, remaining > 0
+			if remaining > 0 {
+				return ackhandler.StreamFrame{Frame: frame}, nil, sendStateReady
+			}
+			return ackhandler.StreamFrame{Frame: frame}, nil, sendStateIdle
 		},
 	).Times(2)
 	framer.AddActiveStream(updatedStreamID, updatedStr)
@@ -632,10 +663,10 @@ func TestFramerMinStreamFrameSize(t *testing.T) {
 
 	// pop frames of the minimum size
 	str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
-		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+		func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 			f := &wire.StreamFrame{StreamID: id, DataLenPresent: true}
 			f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, v))
-			return ackhandler.StreamFrame{Frame: f}, nil, false
+			return ackhandler.StreamFrame{Frame: f}, nil, sendStateIdle
 		},
 	)
 	_, frames, _ = framer.AppendStreamFrames(nil, nil, protocol.MinStreamFrameSize, protocol.Version1)
@@ -657,7 +688,7 @@ func TestFramerMinStreamFrameSizeMultipleStreamFrames(t *testing.T) {
 		Data:           bytes.Repeat([]byte("f"), int(500-protocol.MinStreamFrameSize)),
 		DataLenPresent: true,
 	}
-	str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f}, nil, false)
+	str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).Return(ackhandler.StreamFrame{Frame: f}, nil, sendStateIdle)
 	framer.AddActiveStream(id, str)
 	_, fs, length := framer.AppendStreamFrames(nil, nil, 500, protocol.Version1)
 	require.Len(t, fs, 1)
@@ -673,14 +704,14 @@ func TestFramerFillPacketOneStream(t *testing.T) {
 
 	for i := protocol.MinStreamFrameSize; i < 2000; i++ {
 		str.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
-			func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+			func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 				f := &wire.StreamFrame{
 					StreamID:       id,
 					DataLenPresent: true,
 				}
 				f.Data = make([]byte, f.MaxDataLen(size, v))
 				require.Equal(t, size, f.Length(protocol.Version1))
-				return ackhandler.StreamFrame{Frame: f}, nil, false
+				return ackhandler.StreamFrame{Frame: f}, nil, sendStateIdle
 			},
 		)
 		framer.AddActiveStream(id, str)
@@ -706,18 +737,18 @@ func TestFramerFillPacketMultipleStreams(t *testing.T) {
 
 	for i := 2 * protocol.MinStreamFrameSize; i < 2000; i++ {
 		str1.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
-			func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+			func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 				f := &wire.StreamFrame{StreamID: id1, DataLenPresent: true}
 				f.Data = make([]byte, f.MaxDataLen(protocol.MinStreamFrameSize, v))
-				return ackhandler.StreamFrame{Frame: f}, nil, false
+				return ackhandler.StreamFrame{Frame: f}, nil, sendStateIdle
 			},
 		)
 		str2.EXPECT().popStreamFrame(gomock.Any(), protocol.Version1).DoAndReturn(
-			func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, bool) {
+			func(size protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, *wire.StreamDataBlockedFrame, sendState) {
 				f := &wire.StreamFrame{StreamID: id2, DataLenPresent: true}
 				f.Data = make([]byte, f.MaxDataLen(size, v))
 				require.Equal(t, size, f.Length(protocol.Version1))
-				return ackhandler.StreamFrame{Frame: f}, nil, false
+				return ackhandler.StreamFrame{Frame: f}, nil, sendStateIdle
 			},
 		)
 		framer.AddActiveStream(id1, str1)
