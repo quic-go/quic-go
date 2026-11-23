@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   PR:
-    if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
     env:
       # Forked PRs don't receive repository secrets, so they run without corpus storage.
       CLUSTERFUZZ_LITE_STORAGE_REPO: >-
@@ -28,8 +27,11 @@ jobs:
       matrix:
         sanitizer:
         - address
+    # Dependabot PRs skip the steps, not the job: a skipped job doesn't expand
+    # the matrix, so it never reports the required "PR (address)" check.
     steps:
     - name: Build Fuzzers (${{ matrix.sanitizer }})
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
       with:
         language: go
@@ -39,6 +41,7 @@ jobs:
         storage-repo-branch: master
         storage-repo-branch-coverage: gh-pages
     - name: Run Fuzzers (${{ matrix.sanitizer }})
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
