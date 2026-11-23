@@ -40,7 +40,7 @@ jobs:
           GOARCH: amd64
         run: go test -c -o udp.test ./internal/udp
       - name: Start VM
-        uses: cross-platform-actions/action@82668f1fbd89d9c99487604f822cbf6716f124d3 # v1.7.0
+        uses: cross-platform-actions/action@30cde56b87a128507bebea9531205087890ee360 # v1.8.0
         with:
           operating_system: ${{ matrix.os }}
           version: ${{ matrix.version }}
