@@ -154,6 +154,8 @@ func (f *framer) AppendStreamFrames(
 
 	var lastFrame ackhandler.StreamFrame
 	var controlFrameLen, streamFrameLen protocol.ByteCount
+	// set if a stream sent new data, or has data but is blocked on stream flow control
+	var hasData bool
 	f.mutex.Lock()
 	// retransmit all lost STREAM data before sending new STREAM data
 retransmissions:
@@ -206,10 +208,14 @@ retransmissions:
 				maxLen -= sf.Frame.Length(v)
 				lastFrame = sf
 				streamFrameLen += sf.Frame.Length(v)
+				if sf.Frame.DataLen() > 0 {
+					hasData = true
+				}
 			}
 			// If the stream just became blocked on stream flow control, attempt to pack the
 			// STREAM_DATA_BLOCKED into the same packet.
 			if blocked != nil {
+				hasData = true
 				l := blocked.Length(v)
 				// In case it doesn't fit, queue it for the next packet.
 				if maxLen < l {
@@ -223,9 +229,7 @@ retransmissions:
 		}
 	}
 
-	// The only way to become blocked on connection-level flow control is by sending STREAM frames.
-	if isBlocked, offset := f.connFlowController.IsNewlyBlocked(); isBlocked {
-		blocked := &wire.DataBlockedFrame{MaximumData: offset}
+	if blocked := f.maybeGetDataBlockedFrame(hasData); blocked != nil {
 		l := blocked.Length(v)
 		// In case it doesn't fit, queue it for the next packet.
 		if maxLen >= l {
@@ -247,6 +251,19 @@ retransmissions:
 	}
 
 	return frames, streamFrames, controlFrameLen + streamFrameLen
+}
+
+// maybeGetDataBlockedFrame must be called with the mutex held.
+func (f *framer) maybeGetDataBlockedFrame(hasData bool) *wire.DataBlockedFrame {
+	// Only report the connection as blocked if a stream has data to send.
+	if !hasData && len(f.connBlockedStreams) == 0 {
+		return nil
+	}
+	isBlocked, offset := f.connFlowController.IsNewlyBlocked()
+	if !isBlocked {
+		return nil
+	}
+	return &wire.DataBlockedFrame{MaximumData: offset}
 }
 
 func (f *framer) AppendControlFrames(
