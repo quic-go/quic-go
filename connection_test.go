@@ -42,7 +42,10 @@ func connectionOptCryptoSetup(cs *mocks.MockCryptoSetup) testConnectionOpt {
 }
 
 func connectionOptConnFlowController(cfc *connectionFlowController) testConnectionOpt {
-	return func(conn *Conn) { conn.connFlowController = cfc }
+	return func(conn *Conn) {
+		conn.connFlowController = cfc
+		conn.framer = newFramer(cfc)
+	}
 }
 
 func connectionOptTracer(r qlogwriter.Recorder) testConnectionOpt {
@@ -250,10 +253,16 @@ func TestConnectionHandleConnectionFlowControlFrames(t *testing.T) {
 	tc := newServerTestConnection(t, mockCtrl, nil, false, connectionOptConnFlowController(connFC))
 	now := monotime.Now()
 	connID := protocol.ConnectionID{}
+	str := NewMockStreamFrameGetter(mockCtrl)
+	str.EXPECT().priority().Return(defaultUrgency, true, uint32(0)).AnyTimes()
+	str.EXPECT().popStreamFrame(gomock.Any(), gomock.Any()).Return(ackhandler.StreamFrame{}, nil, sendStateConnBlocked)
+	tc.conn.framer.AddActiveStream(4, str)
+	tc.conn.framer.AppendStreamFrames(nil, nil, 1000, protocol.Version1)
 	// MAX_DATA frame
 	_, err := tc.conn.handleFrame(&wire.MaxDataFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)
 	require.Equal(t, protocol.ByteCount(1337), connFC.SendWindowSize())
+	require.True(t, tc.conn.framer.HasData()) // the stream blocked on connection flow control is queued again
 	// DATA_BLOCKED frame
 	_, err = tc.conn.handleFrame(&wire.DataBlockedFrame{MaximumData: 1337}, protocol.Encryption1RTT, connID, now)
 	require.NoError(t, err)

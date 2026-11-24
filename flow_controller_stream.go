@@ -158,10 +158,20 @@ func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
 	return min(c.sendWindow-c.bytesSent, c.connection.SendWindowSize())
 }
 
+// IsBlocked says if the stream flow control limit is reached.
+func (c *streamFlowController) IsBlocked() bool {
+	return c.bytesSent >= c.sendWindow
+}
+
+// IsConnectionBlocked says if the connection flow control limit is reached.
+func (c *streamFlowController) IsConnectionBlocked() bool {
+	return c.connection.IsBlocked()
+}
+
 // IsNewlyBlocked says if it is newly blocked by stream flow control.
 // For every offset, it only returns true once.
 func (c *streamFlowController) IsNewlyBlocked() bool {
-	if c.bytesSent < c.sendWindow || c.sendWindow == c.lastBlockedAt {
+	if !c.IsBlocked() || c.sendWindow == c.lastBlockedAt {
 		return false
 	}
 	c.lastBlockedAt = c.sendWindow
