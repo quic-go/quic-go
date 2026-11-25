@@ -81,7 +81,7 @@ linters:
         path: _test\.go
         text: 'SA1029:' # inappropriate key in call to context.WithValue
     paths:
-      - internal/handshake/cipher_suite.go
+      - internal/handshake/cipher_suite_go127\.go$
       - third_party$
       - builtin$
       - examples$
@@ -93,7 +93,7 @@ formatters:
   exclusions:
     generated: lax
     paths:
-      - internal/handshake/cipher_suite.go
+      - internal/handshake/cipher_suite_go127\.go$
       - third_party$
       - builtin$
       - examples$

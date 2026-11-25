@@ -12,7 +12,7 @@ quic-go delegates the TLS 1.3 handshake, certificate handling, cipher suite sele
 
 The main quic-go-specific FIPS-relevant operations are the AEADs protecting Handshake, 0-RTT, and 1-RTT packets.
 
-AES-GCM packet protection AEADs are constructed through the Go standard library's TLS 1.3 AES-GCM implementation. Today this uses `go:linkname` to call the unexported `crypto/tls.aeadAESGCMTLS13`, because the standard library does not yet expose a QUIC-specific constructor; see [golang/go#79219](https://github.com/golang/go/issues/79219).
+AES-GCM packet protection AEADs are constructed with `crypto/aead/aesgcm.NewWithXORCounterNonces` when built with Go 1.28 or newer. With older Go versions, they are constructed through the Go standard library's TLS 1.3 AES-GCM implementation, using `go:linkname` to call the unexported `crypto/tls.aeadAESGCMTLS13`; see [golang/go#79219](https://github.com/golang/go/issues/79219).
 
 ChaCha20-Poly1305 is not used in Go's FIPS 140-3 mode. `crypto/tls` avoids that cipher suite during negotiation, and quic-go additionally guards its internal ChaCha20-Poly1305 path when FIPS 140-3 mode is enabled.
 

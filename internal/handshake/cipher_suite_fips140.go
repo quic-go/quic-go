@@ -1,3 +1,5 @@
+//go:build !go1.28
+
 package handshake
 
 import (
@@ -10,8 +12,7 @@ import (
 // added in https://go-review.googlesource.com/c/go/+/723760.
 // See https://github.com/golang/go/issues/79219 for details.
 //
-// Once the standard library exposes the necessary constructors, we can use a shared code path
-// for both FIPS 140 and non-FIPS 140 modes.
+// Go 1.28 exposes it as aesgcm.NewWithXORCounterNonces, see cipher_suite_go128.go.
 //
 //go:linkname cryptoTLSAEAD_AESGCMTLS13 crypto/tls.aeadAESGCMTLS13
 func cryptoTLSAEAD_AESGCMTLS13(key, nonceMask []byte) cipher.AEAD
