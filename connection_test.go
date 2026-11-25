@@ -3642,6 +3642,19 @@ func TestConnectionMigrationServer(t *testing.T) {
 	require.ErrorContains(t, err, "server cannot initiate connection migration")
 }
 
+func TestConnectionMigrationAfterClose(t *testing.T) {
+	tc := newClientTestConnection(t, nil, nil, false, connectionOptHandshakeConfirmed())
+	require.NoError(t, tc.conn.handleTransportParameters(&wire.TransportParameters{
+		InitialSourceConnectionID:       tc.destConnID,
+		OriginalDestinationConnectionID: tc.destConnID,
+	}))
+	tr := &Transport{Conn: newUDPConnLocalhost(t), StatelessResetKey: &StatelessResetKey{}}
+	defer tr.Close()
+	tc.conn.setCloseError(&closeError{err: errors.New("connection closed"), immediate: true})
+	_, err := tc.conn.AddPath(tr)
+	require.ErrorIs(t, err, net.ErrClosed)
+}
+
 func TestConnectionMigrationBeforeHandshakeComplete(t *testing.T) {
 	tc := newClientTestConnection(t, nil, nil, false)
 	tc.conn.restoreTransportParameters(&wire.TransportParameters{}) // remembered for 0-RTT
