@@ -149,7 +149,10 @@ type Conn struct {
 	version     protocol.Version
 	config      *Config
 
-	conn      sendConn
+	// Within quic-go, conn is only written at initialization and on the run loop in switchToNewPath.
+	// It needs to be atomic because LocalAddr, RemoteAddr, and ConnectionState read it concurrently
+	// from application goroutines.
+	conn      atomic.Pointer[sendConn]
 	sendQueue sender
 
 	// lazily initialzed: most connections never migrate
@@ -283,7 +286,6 @@ var newConnection = func(
 	s := &Conn{
 		ctx:                 ctx,
 		ctxCancel:           ctxCancel,
-		conn:                conn,
 		config:              conf,
 		handshakeDestConnID: destConnID,
 		srcConnIDLen:        srcConnID.Len(),
@@ -293,6 +295,7 @@ var newConnection = func(
 		logger:              logger,
 		version:             v,
 	}
+	s.conn.Store(&conn)
 	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
@@ -325,7 +328,7 @@ var newConnection = func(
 		s.rttStats,
 		&s.connStats,
 		clientAddressValidated,
-		s.conn.capabilities().ECN,
+		conn.capabilities().ECN,
 		s.receivedPacketHandler.IgnorePacketsBelow,
 		s.perspective,
 		s.qlogger,
@@ -401,7 +404,6 @@ var newClientConnection = func(
 	v protocol.Version,
 ) *wrappedConn {
 	s := &Conn{
-		conn:                conn,
 		config:              conf,
 		origDestConnID:      destConnID,
 		handshakeDestConnID: destConnID,
@@ -413,6 +415,7 @@ var newClientConnection = func(
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
 	}
+	s.conn.Store(&conn)
 	w := &wrappedConn{pathReceiver: pathReceiver{Conn: s}}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
@@ -462,7 +465,7 @@ var newClientConnection = func(
 		s.rttStats,
 		&s.connStats,
 		false, // has no effect
-		s.conn.capabilities().ECN,
+		conn.capabilities().ECN,
 		s.receivedPacketHandler.IgnorePacketsBelow,
 		s.perspective,
 		s.qlogger,
@@ -520,7 +523,7 @@ var newClientConnection = func(
 func (c *Conn) preSetup(r *pathReceiver) {
 	c.largestRcvdAppData = protocol.InvalidPacketNumber
 	c.cryptoStreamManager = newCryptoStreamManager(c.perspective)
-	c.sendQueue = newSendQueue(c.conn)
+	c.sendQueue = newSendQueue(c.currentConn())
 	c.retransmissionQueue = newRetransmissionQueue()
 	c.frameParser = *wire.NewFrameParser(
 		c.config.EnableDatagrams,
@@ -780,7 +783,7 @@ func (c *Conn) ConnectionState() ConnectionState {
 	c.connState.SupportsDatagrams.Local = c.config.EnableDatagrams
 	c.connState.SupportsStreamResetPartialDelivery.Local = c.config.EnableStreamResetPartialDelivery
 	c.connState.RequireStreamCreditRelease = c.config.RequireStreamCreditRelease
-	c.connState.GSO = c.conn.capabilities().GSO
+	c.connState.GSO = c.currentConn().capabilities().GSO
 	return c.connState
 }
 
@@ -916,13 +919,16 @@ func (c *Conn) idleTimeoutStartTime() monotime.Time {
 	return startTime
 }
 
+func (c *Conn) currentConn() sendConn { return *c.conn.Load() }
+
 func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
+	oldConn := c.currentConn()
 	// The connection is registered with the Transport, since it was probed before switching to it.
 	if h, ok := c.connIDGenerator.Handler((*packetHandlerMap)(tr)); ok {
 		if prev := c.receivedPackets.SwapActive(h); prev != h && c.qlogger != nil {
 			// from now on, the old path needs to be logged with its own TupleID
-			c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(prev.id), 10), c.conn.LocalAddr(), c.conn.RemoteAddr()))
-			c.qlogger.RecordEvent(tupleAssignedEvent("", tr.Conn.LocalAddr(), c.conn.RemoteAddr()))
+			c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(prev.id), 10), oldConn.LocalAddr(), oldConn.RemoteAddr()))
+			c.qlogger.RecordEvent(tupleAssignedEvent("", tr.Conn.LocalAddr(), oldConn.RemoteAddr()))
 		}
 	}
 
@@ -930,12 +936,13 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	c.sentPacketHandler.MigratedPath(now, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	c.mtuDiscoverer.Reset(initialPacketSize, c.maxMTU())
-	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), udp.PacketInfo{}, utils.DefaultLogger) // TODO: find a better way
-	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
+	var newConn sendConn = newSendConn(tr.conn, oldConn.RemoteAddr(), udp.PacketInfo{}, utils.DefaultLogger) // TODO: find a better way
+	c.conn.Store(&newConn)
+	if !c.config.DisablePathMTUDiscovery && newConn.capabilities().DF {
 		c.mtuDiscoverer.Start(now)
 	}
 	c.sendQueue.Close()
-	c.sendQueue = newSendQueue(c.conn)
+	c.sendQueue = newSendQueue(newConn)
 	go func() {
 		if err := c.sendQueue.Run(); err != nil {
 			c.destroyImpl(err)
@@ -983,7 +990,7 @@ func (c *Conn) handleHandshakeComplete(now monotime.Time) error {
 			c.queueControlFrame(cf)
 		}
 	}
-	token, err := c.tokenGenerator.NewToken(c.conn.RemoteAddr(), c.rttStats.SmoothedRTT(), c.version)
+	token, err := c.tokenGenerator.NewToken(c.currentConn().RemoteAddr(), c.rttStats.SmoothedRTT(), c.version)
 	if err != nil {
 		return err
 	}
@@ -1006,7 +1013,7 @@ func (c *Conn) handleHandshakeConfirmed(now monotime.Time) error {
 		c.qlogger.RecordEvent(qlog.ConnectionStateUpdated{State: qlog.ConnectionStateHandshakeConfirmed})
 	}
 
-	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
+	if !c.config.DisablePathMTUDiscovery && c.currentConn().capabilities().DF {
 		c.mtuDiscoverer.Start(now)
 	}
 	return nil
@@ -1257,7 +1264,7 @@ func (c *Conn) handleShortHeaderPacket(
 		if id, isNew, ok := c.pathManager.GetOrCreatePath(p.remoteAddr, p.rcvTime); ok {
 			path = id
 			if isNew && c.qlogger != nil {
-				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), c.conn.LocalAddr(), p.remoteAddr))
+				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), c.currentConn().LocalAddr(), p.remoteAddr))
 			}
 		}
 	}
@@ -1329,13 +1336,14 @@ func (c *Conn) handleShortHeaderPacket(
 	c.sentPacketHandler.MigratedPath(p.rcvTime, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	c.mtuDiscoverer.Reset(initialPacketSize, c.maxMTU())
-	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
+	curConn := c.currentConn()
+	if !c.config.DisablePathMTUDiscovery && curConn.capabilities().DF {
 		c.mtuDiscoverer.Start(p.rcvTime)
 	}
-	c.conn.ChangeRemoteAddr(p.remoteAddr, p.info)
+	curConn.ChangeRemoteAddr(p.remoteAddr, p.info)
 	if c.qlogger != nil {
 		// the TupleID "" refers to the active path
-		c.qlogger.RecordEvent(tupleAssignedEvent("", c.conn.LocalAddr(), p.remoteAddr))
+		c.qlogger.RecordEvent(tupleAssignedEvent("", curConn.LocalAddr(), p.remoteAddr))
 	}
 	return true, nil
 }
@@ -1779,10 +1787,11 @@ func (c *Conn) handleUnpackedLongHeaderPacket(
 			}
 			if c.qlogger != nil {
 				var srcAddr, destAddr *net.UDPAddr
-				if addr, ok := c.conn.LocalAddr().(*net.UDPAddr); ok {
+				curConn := c.currentConn()
+				if addr, ok := curConn.LocalAddr().(*net.UDPAddr); ok {
 					srcAddr = addr
 				}
-				if addr, ok := c.conn.RemoteAddr().(*net.UDPAddr); ok {
+				if addr, ok := curConn.RemoteAddr().(*net.UDPAddr); ok {
 					destAddr = addr
 				}
 				c.qlogger.RecordEvent(startedConnectionEvent(srcAddr, destAddr))
@@ -2177,7 +2186,7 @@ func (c *Conn) handlePathChallengeFrame(f *wire.PathChallengeFrame, path pathID,
 	}
 	c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, 0, strconv.FormatInt(int64(path), 10))
 	c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
-	tr.WriteTo(buf.Data, c.conn.RemoteAddr())
+	tr.WriteTo(buf.Data, c.currentConn().RemoteAddr())
 	return nil
 }
 
@@ -2620,7 +2629,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 				h, _ := c.connIDGenerator.Handler((*packetHandlerMap)(tr))
 				c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, 0, strconv.FormatInt(int64(h.id), 10))
 				c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
-				tr.WriteTo(buf.Data, c.conn.RemoteAddr())
+				tr.WriteTo(buf.Data, c.currentConn().RemoteAddr())
 				// There's (likely) more data to send. Loop around again.
 				c.scheduleSending()
 				return nil
@@ -2672,7 +2681,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 		return nil
 	}
 
-	if c.conn.capabilities().GSO {
+	if c.currentConn().capabilities().GSO {
 		return c.sendPacketsWithGSO(now)
 	}
 	return c.sendPacketsWithoutGSO(now)
@@ -2963,7 +2972,7 @@ func (c *Conn) sendPackedCoalescedPacket(packet *coalescedPacket, ecn protocol.E
 	// can send smaller ACKs before receiving the full ClientHello. Keep those
 	// writes here too, so the send queue can't write concurrently with us.
 	packetSize := packet.buffer.Len()
-	err := c.conn.Write(packet.buffer.Data, 0, ecn)
+	err := c.currentConn().Write(packet.buffer.Data, 0, ecn)
 	packet.buffer.Release()
 	if err != nil {
 		if !udp.IsSendMsgSizeErr(err) || c.config.InitialPacketSize != 0 {
@@ -3000,7 +3009,7 @@ func (c *Conn) sendConnectionClose(e error) ([]byte, error) {
 	}
 	ecn := c.sentPacketHandler.ECNMode(packet.IsOnlyShortHeaderPacket())
 	c.logCoalescedPacket(packet, ecn)
-	return packet.buffer.Data, c.conn.Write(packet.buffer.Data, 0, ecn)
+	return packet.buffer.Data, c.currentConn().Write(packet.buffer.Data, 0, ecn)
 }
 
 func (c *Conn) maxPacketSize() protocol.ByteCount {
@@ -3211,10 +3220,10 @@ func (c *Conn) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 }
 
 // LocalAddr returns the local address of the QUIC connection.
-func (c *Conn) LocalAddr() net.Addr { return c.conn.LocalAddr() }
+func (c *Conn) LocalAddr() net.Addr { return c.currentConn().LocalAddr() }
 
 // RemoteAddr returns the remote address of the QUIC connection.
-func (c *Conn) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
+func (c *Conn) RemoteAddr() net.Addr { return c.currentConn().RemoteAddr() }
 
 // getPathManager lazily initializes the Conn's pathManagerOutgoing.
 // May create multiple pathManagerOutgoing objects if called concurrently.
@@ -3264,7 +3273,7 @@ func (c *Conn) AddPath(t *Transport) (*Path, error) {
 		func(id pathID) {
 			r := &pathReceiver{Conn: c, id: id}
 			if c.connIDGenerator.AddConnRunner((*packetHandlerMap)(t), r) && c.qlogger != nil {
-				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), t.Conn.LocalAddr(), c.conn.RemoteAddr()))
+				c.qlogger.RecordEvent(tupleAssignedEvent(strconv.FormatInt(int64(id), 10), t.Conn.LocalAddr(), c.currentConn().RemoteAddr()))
 			}
 		},
 	), nil

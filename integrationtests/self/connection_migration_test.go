@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"slices"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -216,6 +218,54 @@ func TestConnectionMigration(t *testing.T) {
 		requireConnIDsNotLinkable(t, clientEvents.Events())
 		requireConnIDsNotLinkable(t, serverEvents.Events())
 	})
+}
+
+func TestConnectionMigrationConcurrentMetadata(t *testing.T) {
+	const rtt = 5 * time.Millisecond
+	network := newTestNetworkWithSettings(t, simnet.NodeBiDiLinkSettings{Latency: rtt / 2})
+
+	ln, err := quic.Listen(network.NewConn(), getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	tr1 := &quic.Transport{Conn: network.NewConn()}
+	defer tr1.Close()
+	tr2 := &quic.Transport{Conn: network.NewConn()}
+	defer tr2.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := tr1.Dial(ctx, ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				_ = conn.LocalAddr()
+				_ = conn.RemoteAddr()
+				_ = conn.ConnectionState()
+				runtime.Gosched()
+			}
+		}
+	})
+	defer func() {
+		close(done)
+		wg.Wait()
+	}()
+
+	path, err := conn.AddPath(tr2)
+	require.NoError(t, err)
+	require.NoError(t, path.Probe(ctx))
+	require.NoError(t, path.Switch())
+	require.Eventually(t, func() bool {
+		return conn.LocalAddr().String() == tr2.Conn.LocalAddr().String()
+	}, time.Second, time.Millisecond)
 }
 
 // requireConnIDsNotLinkable checks that no connection ID is used on more than one tuple,
