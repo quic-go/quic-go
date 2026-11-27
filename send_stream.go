@@ -75,8 +75,11 @@ type SendStream struct {
 	priorityValue atomic.Uint64
 
 	writeChan chan struct{}
-	writeOnce chan struct{}
-	deadline  monotime.Time
+	// The stream API allows only one call to Write, WriteWithLimit, or TryWriteAll at a time.
+	// Concurrent calls can cause hard-to-debug failures, so we hold writeMutex
+	// for the entire call, even while waiting for network I/O.
+	writeMutex sync.Mutex
+	deadline   monotime.Time
 
 	flowController *streamFlowController
 }
@@ -99,7 +102,6 @@ func newSendStream(
 		sender:                sender,
 		flowController:        flowController,
 		writeChan:             make(chan struct{}, 1),
-		writeOnce:             make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 		supportsResetStreamAt: supportsResetStreamAt,
 	}
 	s.priorityValue.Store(encodeStreamPriority(defaultUrgency, true, 0))
@@ -131,11 +133,8 @@ func (s *SendStream) Write(p []byte) (int, error) {
 // is locked. It must be concurrency-safe and must not block or call QUIC methods.
 // A nil limiter behaves like [SendStream.Write].
 func (s *SendStream) WriteWithLimit(p []byte, limiter func(maxBytes int) int) (int, error) {
-	// Concurrent use of Write is not permitted (and doesn't make any sense),
-	// but sometimes people do it anyway.
-	// Make sure that we only execute one call at any given time to avoid hard to debug failures.
-	s.writeOnce <- struct{}{}
-	defer func() { <-s.writeOnce }()
+	s.writeMutex.Lock()
+	defer s.writeMutex.Unlock()
 
 	isNewlyCompleted, n, err := s.write(p, limiter)
 	if isNewlyCompleted {
@@ -148,12 +147,10 @@ func (s *SendStream) WriteWithLimit(p []byte, limiter func(maxBytes int) int) (i
 // It doesn't block for flow control credit and doesn't respect the write deadline.
 // If the entire slice can't be queued immediately, it queues nothing and returns [ErrWouldBlock].
 func (s *SendStream) TryWriteAll(p []byte) error {
-	select {
-	case s.writeOnce <- struct{}{}:
-		defer func() { <-s.writeOnce }()
-	default:
+	if !s.writeMutex.TryLock() {
 		return ErrWouldBlock
 	}
+	defer s.writeMutex.Unlock()
 
 	isNewlyCompleted, hasData, err := s.tryWriteAll(p)
 	if isNewlyCompleted {

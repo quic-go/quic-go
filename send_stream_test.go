@@ -370,6 +370,7 @@ func TestSendStreamWriteAfterTryWriteAll(t *testing.T) {
 			t.Fatalf("Write should not have returned yet: %v", err)
 		default:
 		}
+		require.ErrorIs(t, str.TryWriteAll([]byte("baz")), ErrWouldBlock)
 
 		frame, _, state := str.popStreamFrame(protocol.MaxByteCount, protocol.Version1)
 		require.Equal(t, sendStateReady, state)

@@ -46,8 +46,11 @@ type ReceiveStream struct {
 	reliableSize protocol.ByteCount
 
 	readChan chan struct{}
-	readOnce chan struct{} // cap: 1, to protect against concurrent use of Read
-	deadline monotime.Time
+	// The stream API allows only one call to Read or Peek at a time.
+	// Concurrent calls can cause hard-to-debug failures, so we hold readMutex
+	// for the entire call, even while waiting for data from the peer.
+	readMutex sync.Mutex
+	deadline  monotime.Time
 
 	flowController *streamFlowController
 }
@@ -68,7 +71,6 @@ func newReceiveStream(
 		flowController: flowController,
 		frameQueue:     newFrameSorter(),
 		readChan:       make(chan struct{}, 1),
-		readOnce:       make(chan struct{}, 1),
 		finalOffset:    protocol.MaxByteCount,
 	}
 }
@@ -111,11 +113,8 @@ func (s *ReceiveStream) SetReceiveFinalSizeCallback(callback func(int64)) {
 // Read can be made to time out using [ReceiveStream.SetReadDeadline].
 // If the stream was canceled, the error is a [StreamError].
 func (s *ReceiveStream) Read(p []byte) (int, error) {
-	// Concurrent use of Read is not permitted (and doesn't make any sense),
-	// but sometimes people do it anyway.
-	// Make sure that we only execute one call at any given time to avoid hard to debug failures.
-	s.readOnce <- struct{}{}
-	defer func() { <-s.readOnce }()
+	s.readMutex.Lock()
+	defer s.readMutex.Unlock()
 
 	s.mutex.Lock()
 	queuedStreamWindowUpdate, queuedConnWindowUpdate, n, err := s.readImpl(p)
@@ -286,9 +285,8 @@ func (s *ReceiveStream) Peek(b []byte) (int, error) {
 		return 0, nil
 	}
 
-	// prevent concurrent use with Read
-	s.readOnce <- struct{}{}
-	defer func() { <-s.readOnce }()
+	s.readMutex.Lock()
+	defer s.readMutex.Unlock()
 
 	return s.peekImpl(b)
 }
