@@ -67,6 +67,16 @@ func (r *roundTripperWithCount) IsIdle() bool {
 	}
 }
 
+// DialFailed reports whether the dial finished with an error.
+func (r *roundTripperWithCount) DialFailed() bool {
+	select {
+	case <-r.dialing:
+		return r.dialErr != nil
+	default:
+		return false
+	}
+}
+
 func (r *roundTripperWithCount) Close() error {
 	r.cancel()
 	<-r.dialing
@@ -227,14 +237,15 @@ func (t *Transport) roundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		}
 	}
 
-	return t.doRoundTripOpt(req, opt, false)
+	return t.doRoundTripOpt(req, opt, nil)
 }
 
-func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetried bool) (*http.Response, error) {
+// If req is a retry, failed is the client the first attempt failed on.
+func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, failed *roundTripperWithCount) (*http.Response, error) {
 	hostname := authorityAddr(hostnameFromURL(req.URL))
 	trace := httptrace.ContextClientTrace(req.Context())
 	traceGetConn(trace, hostname)
-	cl, isReused, err := t.getClient(req.Context(), hostname, opt.OnlyCachedConn)
+	cl, isReused, err := t.getClient(req.Context(), hostname, opt.OnlyCachedConn, failed)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +258,6 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 	}
 
 	if cl.dialErr != nil {
-		t.removeClient(hostname)
 		return nil, cl.dialErr
 	}
 	traceGotConn(trace, cl.conn, isReused)
@@ -259,7 +269,7 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 			return nil, err
 		default:
 		}
-		if isRetried {
+		if failed != nil {
 			return nil, err
 		}
 
@@ -267,8 +277,7 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 		if err != nil {
 			return nil, err
 		}
-		t.removeClient(hostname)
-		return t.doRoundTripOpt(req, opt, true)
+		return t.doRoundTripOpt(req, opt, cl)
 	}
 	return rsp, nil
 }
@@ -308,7 +317,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.RoundTripOpt(req, RoundTripOpt{})
 }
 
-func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached bool) (rtc *roundTripperWithCount, isReused bool, err error) {
+func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached bool, failed *roundTripperWithCount) (rtc *roundTripperWithCount, isReused bool, err error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 	if t.closed {
@@ -320,7 +329,7 @@ func (t *Transport) getClient(ctx context.Context, hostname string, onlyCached b
 	}
 
 	cl, ok := t.clients[hostname]
-	if !ok {
+	if !ok || cl == failed || cl.DialFailed() {
 		if onlyCached {
 			return nil, false, ErrNoCachedConn
 		}
@@ -434,15 +443,6 @@ func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*
 	addrs := addrList(ipAddrs)
 	ip := addrs.forResolve(network, addr)
 	return &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}, nil
-}
-
-func (t *Transport) removeClient(hostname string) {
-	t.mutex.Lock()
-	defer t.mutex.Unlock()
-	if t.clients == nil {
-		return
-	}
-	delete(t.clients, hostname)
 }
 
 // NewClientConn creates a new HTTP/3 client connection on top of a QUIC connection.

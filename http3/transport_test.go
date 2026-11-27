@@ -368,6 +368,38 @@ func testTransportConnectionRedial(t *testing.T, req *http.Request, roundtripErr
 	return err
 }
 
+// A request failing on a connection that was already replaced doesn't remove the new connection.
+func TestTransportRedialKeepsNewerConnection(t *testing.T) {
+	conn, _ := newConnPair(t)
+	mockCtrl := gomock.NewController(t)
+	cl := NewMockClientConn(mockCtrl)
+	var dialCount int
+	tr := &Transport{
+		Dial: func(context.Context, string, *tls.Config, *quic.Config) (*quic.Conn, error) {
+			dialCount++
+			return conn, nil
+		},
+		newClientConn: func(*quic.Conn) clientConn { return cl },
+	}
+
+	req1 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file1.html", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
+	cl.EXPECT().RoundTrip(req1).DoAndReturn(func(*http.Request) (*http.Response, error) {
+		// while req1 is in flight, req2 fails on the same connection and replaces it
+		_, err := tr.RoundTrip(req2)
+		require.NoError(t, err)
+		return nil, &errConnUnusable{errors.New("test")}
+	})
+	cl.EXPECT().RoundTrip(req2).Return(nil, &errConnUnusable{errors.New("test")})
+	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
+	// req1 is retried on the connection that req2 dialed
+	cl.EXPECT().RoundTrip(req1).Return(&http.Response{Request: req1}, nil)
+
+	_, err := tr.RoundTrip(req1)
+	require.NoError(t, err)
+	require.Equal(t, 2, dialCount)
+}
+
 func TestTransportRequestContextCancellation(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	cl := NewMockClientConn(mockCtrl)
