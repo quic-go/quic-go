@@ -149,7 +149,7 @@ type Conn struct {
 	version     protocol.Version
 	config      *Config
 
-	conn      sendConn
+	conn      sendConn // only replaced on the run loop, under connStateMutex
 	sendQueue sender
 
 	// lazily initialzed: most connections never migrate
@@ -930,7 +930,9 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 	c.sentPacketHandler.MigratedPath(now, initialPacketSize)
 	c.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(initialPacketSize)))
 	c.mtuDiscoverer.Reset(initialPacketSize, c.maxMTU())
+	c.connStateMutex.Lock()
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), udp.PacketInfo{}, utils.DefaultLogger) // TODO: find a better way
+	c.connStateMutex.Unlock()
 	if !c.config.DisablePathMTUDiscovery && c.conn.capabilities().DF {
 		c.mtuDiscoverer.Start(now)
 	}
@@ -1245,7 +1247,7 @@ func (c *Conn) handleShortHeaderPacket(
 
 	// Only the client can migrate between paths, so only the server receives packets from different addresses.
 	// The path is created before handling the frames, so that the packet can be logged with the path's tuple.
-	checkPath := c.perspective == protocol.PerspectiveServer && !addrsEqual(p.remoteAddr, c.RemoteAddr())
+	checkPath := c.perspective == protocol.PerspectiveServer && !addrsEqual(p.remoteAddr, c.conn.RemoteAddr())
 	if checkPath {
 		if c.pathManager == nil {
 			c.pathManager = newPathManager(
@@ -2616,7 +2618,7 @@ func (c *Conn) sendPackets(now monotime.Time) error {
 				if err != nil {
 					return err
 				}
-				c.logger.Debugf("sending path probe packet from %s", c.LocalAddr())
+				c.logger.Debugf("sending path probe packet from %s", c.conn.LocalAddr())
 				h, _ := c.connIDGenerator.Handler((*packetHandlerMap)(tr))
 				c.logShortHeaderPacketWithDatagramPayloadChecksum(probe, protocol.ECNNon, buf.Len(), false, 0, strconv.FormatInt(int64(h.id), 10))
 				c.registerPackedShortHeaderPacket(probe, protocol.ECNNon, now)
@@ -3211,10 +3213,18 @@ func (c *Conn) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 }
 
 // LocalAddr returns the local address of the QUIC connection.
-func (c *Conn) LocalAddr() net.Addr { return c.conn.LocalAddr() }
+func (c *Conn) LocalAddr() net.Addr {
+	c.connStateMutex.Lock()
+	defer c.connStateMutex.Unlock()
+	return c.conn.LocalAddr()
+}
 
 // RemoteAddr returns the remote address of the QUIC connection.
-func (c *Conn) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
+func (c *Conn) RemoteAddr() net.Addr {
+	c.connStateMutex.Lock()
+	defer c.connStateMutex.Unlock()
+	return c.conn.RemoteAddr()
+}
 
 // getPathManager lazily initializes the Conn's pathManagerOutgoing.
 // May create multiple pathManagerOutgoing objects if called concurrently.
