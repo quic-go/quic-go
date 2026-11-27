@@ -255,7 +255,13 @@ func TestTransportConnectionReuse(t *testing.T) {
 	require.Same(t, req1, rsp.Request)
 	require.Equal(t, 1, dialCount)
 
-	// ... which is then used for the second request
+	// ... which a failed request doesn't take out of the pool ...
+	reqFail := httptest.NewRequest(http.MethodGet, "https://quic-go.net/fail.html", nil)
+	cl.EXPECT().RoundTrip(reqFail).Return(nil, &Error{ErrorCode: ErrCodeInternalError})
+	_, err = tr.RoundTrip(reqFail)
+	require.Error(t, err)
+
+	// ... and is then used for the second request
 	req2 := httptest.NewRequest(http.MethodGet, "https://quic-go.net/file2.html", nil)
 	cl.EXPECT().RoundTrip(req2).Return(&http.Response{Request: req2}, nil)
 	rsp, err = tr.RoundTrip(req2)
