@@ -123,8 +123,6 @@ type Config struct {
 	MaxIdleTimeout time.Duration
 	// The TokenStore stores tokens received from the server.
 	// Tokens are used to skip address validation on future connection attempts.
-	// The key used to store tokens is the ServerName from the tls.Config, if set
-	// otherwise the token is associated with the server's IP address.
 	TokenStore TokenStore
 	// InitialStreamReceiveWindow is the initial size of the stream-level flow control window for receiving data.
 	// If the application is consuming data quickly enough, the flow control auto-tuning algorithm

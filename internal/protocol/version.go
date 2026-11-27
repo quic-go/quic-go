@@ -7,6 +7,7 @@ import (
 	"math"
 	mrand "math/rand/v2"
 	"slices"
+	"strconv"
 	"sync"
 )
 
@@ -51,6 +52,19 @@ func (vn Version) String() string {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())
 		}
 		return fmt.Sprintf("%#x", uint32(vn))
+	}
+}
+
+// VersionedKey appends the version number to a token store or session cache key.
+func VersionedKey(key string, v Version) string {
+	//nolint:exhaustive // other versions are formatted in the default case
+	switch v {
+	case Version1:
+		return key + "|1"
+	case Version2:
+		return key + "|6b3343cf"
+	default:
+		return key + "|" + strconv.FormatUint(uint64(v), 16)
 	}
 }
 
