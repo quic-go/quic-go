@@ -247,7 +247,7 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 	}
 
 	if cl.dialErr != nil {
-		t.removeClient(hostname)
+		t.removeClient(hostname, cl)
 		return nil, cl.dialErr
 	}
 	traceGotConn(trace, cl.conn, isReused)
@@ -267,7 +267,7 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 		if err != nil {
 			return nil, err
 		}
-		t.removeClient(hostname)
+		t.removeClient(hostname, cl)
 		return t.doRoundTripOpt(req, opt, true)
 	}
 	return rsp, nil
@@ -436,13 +436,13 @@ func (t *Transport) resolveUDPAddr(ctx context.Context, network, addr string) (*
 	return &net.UDPAddr{IP: ip.IP, Port: port, Zone: ip.Zone}, nil
 }
 
-func (t *Transport) removeClient(hostname string) {
+// removeClient removes cl, unless another request already replaced it.
+func (t *Transport) removeClient(hostname string, cl *roundTripperWithCount) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	if t.clients == nil {
-		return
+	if t.clients[hostname] == cl {
+		delete(t.clients, hostname)
 	}
-	delete(t.clients, hostname)
 }
 
 // NewClientConn creates a new HTTP/3 client connection on top of a QUIC connection.
