@@ -11,6 +11,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 
@@ -907,23 +908,18 @@ func TestReceiveStreamReset(t *testing.T) {
 		_, err = strWithTimeout.Read([]byte{0})
 		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
 
-		// further RESET_STREAM frames have no effect
-		require.NoError(t, str.handleResetStreamFrame(
-			&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 4321, FinalSize: 42},
-			monotime.Now(),
-		))
-
-		n, err = str.Read([]byte{0})
-		require.Zero(t, n)
-		// error code unchanged
-		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
-
 		// CancelRead after a RESET_STREAM frame has no effect
 		str.CancelRead(100)
 		n, err = str.Read([]byte{0})
 		require.Zero(t, n)
 		// error code and remote flag unchanged
 		require.ErrorIs(t, err, &StreamError{StreamID: 42, ErrorCode: 1234, Remote: true})
+
+		// further RESET_STREAM frames must not change the error code
+		require.ErrorIs(t,
+			str.handleResetStreamFrame(&wire.ResetStreamFrame{StreamID: 42, ErrorCode: 4321, FinalSize: 42}, monotime.Now()),
+			&qerr.TransportError{ErrorCode: qerr.StreamStateError},
+		)
 	})
 }
 
