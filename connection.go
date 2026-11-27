@@ -780,7 +780,6 @@ func (c *Conn) ConnectionState() ConnectionState {
 	c.connState.SupportsDatagrams.Local = c.config.EnableDatagrams
 	c.connState.SupportsStreamResetPartialDelivery.Local = c.config.EnableStreamResetPartialDelivery
 	c.connState.RequireStreamCreditRelease = c.config.RequireStreamCreditRelease
-	c.connState.GSO = c.conn.capabilities().GSO
 	return c.connState
 }
 

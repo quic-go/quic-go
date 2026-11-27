@@ -231,6 +231,4 @@ type ConnectionState struct {
 	Used0RTT bool
 	// Version is the QUIC version of the QUIC connection.
 	Version Version
-	// GSO says if generic segmentation offload is used.
-	GSO bool
 }
