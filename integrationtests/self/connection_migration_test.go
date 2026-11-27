@@ -165,8 +165,23 @@ func TestConnectionMigration(t *testing.T) {
 
 		// now switch and make sure that no packets are sent on path 1
 		n = len(clientEvents.Events())
+		// Switching paths replaces the connection's send conn on the run loop.
+		// Calling LocalAddr concurrently makes the race detector flag any unsynchronized access.
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				case <-time.After(time.Millisecond):
+					conn.LocalAddr()
+				}
+			}
+		}()
 		require.NoError(t, path.Switch())
 		sendAndReceiveFile(t) // stream 10
+
 		// the old path is assigned its own tuple, and the default tuple now refers to the new path
 		require.Equal(t, []string{"1", "0", ""}, assignedTuples(&clientEvents))
 		require.Equal(t, []string{""}, sentTuples(n))
