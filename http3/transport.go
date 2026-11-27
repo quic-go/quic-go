@@ -263,11 +263,11 @@ func (t *Transport) doRoundTripOpt(req *http.Request, opt RoundTripOpt, isRetrie
 			return nil, err
 		}
 
-		t.removeClient(hostname)
 		req, err = canRetryRequest(err, req)
 		if err != nil {
 			return nil, err
 		}
+		t.removeClient(hostname)
 		return t.doRoundTripOpt(req, opt, true)
 	}
 	return rsp, nil
