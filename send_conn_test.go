@@ -59,10 +59,23 @@ func TestSendConnDetectGSOFailure(t *testing.T) {
 	remoteAddr := &net.UDPAddr{IP: net.IPv4(192, 168, 100, 200), Port: 1337}
 	rawConn := NewMockRawConn(gomock.NewController(t))
 	rawConn.EXPECT().LocalAddr()
-	rawConn.EXPECT().Capabilities().Return(udp.Capabilities{GSO: true}).MinTimes(1)
+	// The run loop checks for GSO support while the send queue writes.
+	// Read the GSO error flag concurrently, so the race detector flags unsynchronized access.
+	checkedGSO := make(chan struct{})
+	rawConn.EXPECT().Capabilities().DoAndReturn(func() udp.Capabilities {
+		close(checkedGSO)
+		return udp.Capabilities{GSO: true}
+	})
+	rawConn.EXPECT().Capabilities().Return(udp.Capabilities{GSO: true}).AnyTimes()
 	c := newSendConn(rawConn, remoteAddr, udp.PacketInfo{}, utils.DefaultLogger)
+	go c.capabilities()
 	gomock.InOrder(
-		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(4), protocol.ECNCE).Return(0, errGSO),
+		rawConn.EXPECT().WritePacket([]byte("foobar"), remoteAddr, gomock.Any(), uint16(4), protocol.ECNCE).DoAndReturn(
+			func([]byte, net.Addr, []byte, uint16, protocol.ECN) (int, error) {
+				<-checkedGSO
+				return 0, errGSO
+			},
+		),
 		rawConn.EXPECT().WritePacket([]byte("foob"), remoteAddr, gomock.Any(), uint16(0), protocol.ECNCE).Return(4, nil),
 		rawConn.EXPECT().WritePacket([]byte("ar"), remoteAddr, gomock.Any(), uint16(0), protocol.ECNCE).Return(2, nil),
 	)
