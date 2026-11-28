@@ -200,3 +200,74 @@ func TestPathMTUDiscovery(t *testing.T) {
 		require.LessOrEqual(t, numPacketsLargerThanDiscoveredMTU, 1)
 	})
 }
+
+func TestMaxUDPPayloadSizeTransportParameter(t *testing.T) {
+	const (
+		serverMaxUDPPayloadSize = 1232
+		clientMaxUDPPayloadSize = 1300
+	)
+
+	server := &quic.Transport{Conn: newUDPConnLocalhost(t), MaxUDPPayloadSize: serverMaxUDPPayloadSize}
+	defer server.Close()
+	ln, err := server.Listen(getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	client := &quic.Transport{Conn: newUDPConnLocalhost(t), MaxUDPPayloadSize: clientMaxUDPPayloadSize}
+	defer client.Close()
+	var eventRecorder events.Recorder
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := client.Dial(ctx, ln.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{
+		// the Initial packet needs to fit into the server's max_udp_payload_size
+		InitialPacketSize: protocol.MinInitialPacketSize,
+		Tracer:            newTracer(&eventRecorder),
+	}))
+	require.NoError(t, err)
+	defer conn.CloseWithError(0, "")
+
+	var sent, received []protocol.ByteCount
+	for _, ev := range eventRecorder.Events(qlog.ParametersSet{}) {
+		e := ev.(qlog.ParametersSet)
+		switch e.Initiator {
+		case qlog.InitiatorLocal:
+			sent = append(sent, e.MaxUDPPayloadSize)
+		case qlog.InitiatorRemote:
+			received = append(received, e.MaxUDPPayloadSize)
+		}
+	}
+	require.Equal(t, []protocol.ByteCount{clientMaxUDPPayloadSize}, sent)
+	require.Equal(t, []protocol.ByteCount{serverMaxUDPPayloadSize}, received)
+}
+
+func TestMaxUDPPayloadSizeEnforcement(t *testing.T) {
+	const maxUDPPayloadSize = 1232
+
+	server := &quic.Transport{Conn: newUDPConnLocalhost(t), MaxUDPPayloadSize: maxUDPPayloadSize}
+	defer server.Close()
+	ln, err := server.Listen(getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer ln.Close()
+
+	dial := func(t *testing.T, initialPacketSize uint16) (*quic.Conn, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(&quic.Config{
+			InitialPacketSize:    initialPacketSize,
+			HandshakeIdleTimeout: scaleDuration(100 * time.Millisecond),
+		}))
+	}
+
+	t.Run("at the limit", func(t *testing.T) {
+		conn, err := dial(t, maxUDPPayloadSize)
+		require.NoError(t, err)
+		conn.CloseWithError(0, "")
+	})
+
+	// The server drops the client's Initial packets, since they exceed the limit.
+	t.Run("above the limit", func(t *testing.T) {
+		_, err := dial(t, maxUDPPayloadSize+1)
+		var idleTimeoutErr *quic.IdleTimeoutError
+		require.ErrorAs(t, err, &idleTimeoutErr)
+	})
+}

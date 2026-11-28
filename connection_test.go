@@ -144,6 +144,7 @@ func newServerTestConnection(
 		nil,
 		utils.DefaultLogger,
 		protocol.Version1,
+		protocol.MaxPacketBufferSize,
 	)
 	require.Nil(t, wc.testHooks)
 	conn := wc.Conn
@@ -204,6 +205,7 @@ func newClientTestConnection(
 		nil,
 		utils.DefaultLogger,
 		protocol.Version1,
+		protocol.MaxPacketBufferSize,
 	)
 	require.Nil(t, conn.testHooks)
 	conn.packer = packer

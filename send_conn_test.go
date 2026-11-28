@@ -103,7 +103,7 @@ func TestSendConnRemoteAddrChange(t *testing.T) {
 	ln1 := newUDPConnLocalhost(t)
 	ln2 := newUDPConnLocalhost(t)
 
-	conn, err := udp.Wrap(newUDPConnLocalhost(t))
+	conn, err := udp.Wrap(newUDPConnLocalhost(t), protocol.MaxPacketBufferSize)
 	require.NoError(t, err)
 	c := newSendConn(
 		conn,

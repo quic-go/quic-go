@@ -35,6 +35,7 @@ type serverOpts struct {
 	useRetry                  bool
 	disableVersionNegotiation bool
 	acceptEarly               bool
+	maxUDPPayloadSize         protocol.ByteCount
 	newConn                   func(
 		context.Context,
 		context.CancelCauseFunc,
@@ -55,12 +56,13 @@ type serverOpts struct {
 		qlogwriter.Trace,
 		utils.Logger,
 		protocol.Version,
+		protocol.ByteCount, /* max UDP payload size */
 	) *wrappedConn
 }
 
 func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 	t.Helper()
-	c, err := udp.Wrap(newUDPConnLocalhost(t))
+	c, err := udp.Wrap(newUDPConnLocalhost(t), protocol.MaxPacketBufferSize)
 	require.NoError(t, err)
 	verifySourceAddress := func(net.Addr) bool { return serverOpts.useRetry }
 	config := populateConfig(serverOpts.config)
@@ -81,6 +83,7 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 		verifySourceAddress,
 		serverOpts.disableVersionNegotiation,
 		serverOpts.acceptEarly,
+		serverOpts.maxUDPPayloadSize,
 	)
 	s.newConn = serverOpts.newConn
 	t.Cleanup(func() {
@@ -661,6 +664,8 @@ type connConstructorArgs struct {
 	clientDestConnID protocol.ConnectionID
 	destConnID       protocol.ConnectionID
 	srcConnID        protocol.ConnectionID
+
+	maxUDPPayloadSize protocol.ByteCount
 }
 
 type connConstructorRecorder struct {
@@ -698,6 +703,7 @@ func (r *connConstructorRecorder) NewConn(
 	_ qlogwriter.Trace,
 	_ utils.Logger,
 	_ protocol.Version,
+	maxUDPPayloadSize protocol.ByteCount,
 ) *wrappedConn {
 	r.ch <- connConstructorArgs{
 		ctx:              ctx,
@@ -708,6 +714,8 @@ func (r *connConstructorRecorder) NewConn(
 		clientDestConnID: clientDestConnID,
 		destConnID:       destConnID,
 		srcConnID:        srcConnID,
+
+		maxUDPPayloadSize: maxUDPPayloadSize,
 	}
 	hooks := r.hooks[0]
 	r.hooks = r.hooks[1:]
@@ -730,6 +738,7 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 	server := newTestServer(t, &serverOpts{
 		useRetry:          useRetry,
 		tokenGeneratorKey: tokenGeneratorKey,
+		maxUDPPayloadSize: 1337,
 	})
 
 	done := make(chan struct{}, 3)
@@ -786,6 +795,7 @@ func testServerCreateConnection(t *testing.T, useRetry bool) {
 
 	assert.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}), args.destConnID)
 	assert.NotEqual(t, args.origDestConnID, args.srcConnID)
+	assert.Equal(t, protocol.ByteCount(1337), args.maxUDPPayloadSize)
 	if useRetry {
 		assert.Equal(t, protocol.ParseConnectionID([]byte{5, 4, 3, 2, 1}), args.destConnID)
 		assert.Equal(t, protocol.ParseConnectionID([]byte{0xde, 0xad, 0xc0, 0xde}), args.origDestConnID)
@@ -930,6 +940,7 @@ func TestServerReceiveQueue(t *testing.T) {
 			_ qlogwriter.Trace,
 			_ utils.Logger,
 			_ protocol.Version,
+			_ protocol.ByteCount,
 		) *wrappedConn {
 			newConnChan <- struct{}{}
 			<-acceptConn

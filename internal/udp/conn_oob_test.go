@@ -123,7 +123,7 @@ func (c *mockBatchConn) ReadBatch(ms []ipv4.Message, _ int) (int, error) {
 func TestReadsMultipleMessagesInOneBatch(t *testing.T) {
 	bc := &mockBatchConn{UDPConn: newUDPConnLocalhost(t), t: t, numMsgRead: batchSize/2 + 1}
 
-	conn, err := Wrap(bc)
+	conn, err := Wrap(bc, protocol.MaxPacketBufferSize)
 	require.NoError(t, err)
 
 	for i := range batchSize + 1 {
@@ -137,6 +137,6 @@ func TestReadsMultipleMessagesInOneBatch(t *testing.T) {
 }
 
 func TestWrapWithoutNetConn(t *testing.T) {
-	_, err := Wrap(struct{ OOBCapablePacketConn }{newUDPConnLocalhost(t)})
+	_, err := Wrap(struct{ OOBCapablePacketConn }{newUDPConnLocalhost(t)}, protocol.MaxPacketBufferSize)
 	require.EqualError(t, err, "quic: OOBCapablePacketConn must implement net.Conn or ReadBatch")
 }
