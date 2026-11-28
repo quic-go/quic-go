@@ -64,8 +64,9 @@ type OOBCapablePacketConn interface {
 var _ OOBCapablePacketConn = &net.UDPConn{}
 
 // Wrap configures pc for UDP I/O.
+// maxPacketSize is the size of the buffer used to read a packet. It must not exceed protocol.MaxPacketBufferSize.
 // If pc already implements Conn, it is returned unchanged.
-func Wrap(pc net.PacketConn) (Conn, error) {
+func Wrap(pc net.PacketConn, maxPacketSize protocol.ByteCount) (Conn, error) {
 	// Conn uses internal types, so only packages in this module (e.g. simnet) can implement it.
 	if c, ok := pc.(Conn); ok {
 		return c, nil
@@ -113,9 +114,9 @@ func Wrap(pc net.PacketConn) (Conn, error) {
 	c, ok := pc.(OOBCapablePacketConn)
 	if !ok {
 		utils.DefaultLogger.Infof("PacketConn is not a net.UDPConn. Disabling optimizations possible on UDP connections.")
-		return &basicConn{PacketConn: pc, supportsDF: supportsDF}, nil
+		return &basicConn{PacketConn: pc, supportsDF: supportsDF, maxPacketSize: maxPacketSize}, nil
 	}
-	return newConn(c, supportsDF)
+	return newConn(c, supportsDF, maxPacketSize)
 }
 
 // The basicConn is the most trivial implementation of a rawConn.
@@ -125,16 +126,17 @@ func Wrap(pc net.PacketConn) (Conn, error) {
 // * when the OS doesn't support OOB.
 type basicConn struct {
 	net.PacketConn
-	supportsDF bool
+	supportsDF    bool
+	maxPacketSize protocol.ByteCount
 }
 
 var _ Conn = &basicConn{}
 
 func (c *basicConn) ReadPacket() (Packet, error) {
 	buffer := GetPacketBuffer()
-	// The packet size should not exceed protocol.MaxPacketBufferSize bytes.
+	// The packet size should not exceed maxPacketSize bytes.
 	// Larger packets are truncated and will fail decryption.
-	buffer.Data = buffer.Data[:protocol.MaxPacketBufferSize]
+	buffer.Data = buffer.Data[:c.maxPacketSize]
 	n, addr, err := c.ReadFrom(buffer.Data)
 	if err != nil {
 		return Packet{}, err

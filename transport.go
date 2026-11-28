@@ -140,6 +140,15 @@ type Transport struct {
 	// It is not used for dialed connections.
 	ConnContext func(context.Context, *ClientInfo) (context.Context, error)
 
+	// MaxUDPPayloadSize is the size of the largest UDP datagram that is accepted, in bytes.
+	// It is sent to the peer in the max_udp_payload_size transport parameter, see section 18.2 of RFC 9000.
+	// Larger datagrams are truncated when reading from the connection.
+	// A truncated QUIC packet fails decryption and is dropped. This includes the packets that a client sends
+	// before it has received the transport parameters. Non-QUIC packets are truncated as well.
+	// It doesn't limit the size of the packets sent.
+	// If not set, it defaults to 1452 bytes. Values below 1200 and above 1452 are clamped.
+	MaxUDPPayloadSize uint16
+
 	// A Tracer traces events that don't belong to a single QUIC connection.
 	// The [qlogwriter.Recorder] is closed when the transport is closed.
 	Tracer qlogwriter.Recorder
@@ -243,6 +252,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.VerifySourceAddress,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
+		t.maxUDPPayloadSize(),
 	)
 	t.server = s
 	return s, nil
@@ -328,6 +338,7 @@ func (t *Transport) doDial(
 		qlogTrace,
 		logger,
 		version,
+		t.maxUDPPayloadSize(),
 	)
 	t.handlers[srcConnID] = conn
 	t.mutex.Unlock()
@@ -386,9 +397,16 @@ func (t *Transport) doDial(
 	}
 }
 
+func (t *Transport) maxUDPPayloadSize() protocol.ByteCount {
+	if t.MaxUDPPayloadSize == 0 {
+		return protocol.MaxPacketBufferSize
+	}
+	return min(max(protocol.ByteCount(t.MaxUDPPayloadSize), protocol.MinInitialPacketSize), protocol.MaxPacketBufferSize)
+}
+
 func (t *Transport) init(allowZeroLengthConnIDs bool) error {
 	t.initOnce.Do(func() {
-		conn, err := udp.Wrap(t.Conn)
+		conn, err := udp.Wrap(t.Conn, t.maxUDPPayloadSize())
 		if err != nil {
 			t.initErr = err
 			return

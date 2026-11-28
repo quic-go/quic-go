@@ -592,6 +592,7 @@ func testTransportDial(t *testing.T, early bool) {
 			_ qlogwriter.Trace,
 			_ utils.Logger,
 			_ protocol.Version,
+			_ protocol.ByteCount,
 		) *wrappedConn {
 			return &wrappedConn{testHooks: conn}
 		}
@@ -668,6 +669,7 @@ func TestTransportDialingVersionNegotiation(t *testing.T) {
 		_ qlogwriter.Trace,
 		_ utils.Logger,
 		v protocol.Version,
+		_ protocol.ByteCount,
 	) *wrappedConn {
 		connChan <- connParams{pn: pn, hasNegotiatedVersion: hasNegotiatedVersion, version: v}
 		if counter == 0 {
@@ -797,4 +799,54 @@ func testTransportReplaceWithClosed(t *testing.T, local bool) {
 		t.Logf("sent %d packets, received %d CONNECTION_CLOSE copies", numSent, received)
 		require.Equal(t, int(math.Ceil(math.Log2(float64(numSent)))), received)
 	})
+}
+
+func TestTransportMaxUDPPayloadSize(t *testing.T) {
+	originalClientConnConstructor := newClientConnection
+	t.Cleanup(func() { newClientConnection = originalClientConnConstructor })
+
+	for _, tc := range []struct {
+		name     string
+		value    uint16
+		expected protocol.ByteCount
+	}{
+		{name: "not set", value: 0, expected: protocol.MaxPacketBufferSize},
+		{name: "too small", value: 10, expected: protocol.MinInitialPacketSize},
+		{name: "valid", value: 1300, expected: 1300},
+		{name: "too large", value: protocol.MaxPacketBufferSize + 1, expected: protocol.MaxPacketBufferSize},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var maxUDPPayloadSize protocol.ByteCount
+			newClientConnection = func(
+				_ context.Context,
+				_ sendConn,
+				_ connRunner,
+				_ protocol.ConnectionID,
+				_ protocol.ConnectionID,
+				_ ConnectionIDGenerator,
+				_ *statelessResetter,
+				_ *Config,
+				_ *tls.Config,
+				_ protocol.PacketNumber,
+				_ bool,
+				_ bool,
+				_ qlogwriter.Trace,
+				_ utils.Logger,
+				_ protocol.Version,
+				size protocol.ByteCount,
+			) *wrappedConn {
+				maxUDPPayloadSize = size
+				return &wrappedConn{testHooks: &connTestHooks{
+					handshakeComplete: func() <-chan struct{} { return make(chan struct{}) },
+					run:               func() error { return assert.AnError },
+				}}
+			}
+
+			tr := &Transport{Conn: newUDPConnLocalhost(t), MaxUDPPayloadSize: tc.value}
+			defer tr.Close()
+			_, err := tr.Dial(context.Background(), nil, &tls.Config{}, nil)
+			require.ErrorIs(t, err, assert.AnError)
+			require.Equal(t, tc.expected, maxUDPPayloadSize)
+		})
+	}
 }

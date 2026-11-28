@@ -65,6 +65,7 @@ type baseServer struct {
 	tr                        *packetHandlerMap
 	disableVersionNegotiation bool
 	acceptEarlyConns          bool
+	maxUDPPayloadSize         protocol.ByteCount
 
 	tlsConf *tls.Config
 	config  *Config
@@ -106,6 +107,7 @@ type baseServer struct {
 		qlogwriter.Trace,
 		utils.Logger,
 		protocol.Version,
+		protocol.ByteCount, /* max UDP payload size */
 	) *wrappedConn
 
 	closeMx sync.Mutex
@@ -266,6 +268,7 @@ func newServer(
 	verifySourceAddress func(net.Addr) bool,
 	disableVersionNegotiation bool,
 	acceptEarly bool,
+	maxUDPPayloadSize protocol.ByteCount,
 ) *baseServer {
 	s := &baseServer{
 		conn:                      conn,
@@ -292,6 +295,7 @@ func newServer(
 		logger:                    utils.DefaultLogger.WithPrefix("server"),
 		acceptEarlyConns:          acceptEarly,
 		disableVersionNegotiation: disableVersionNegotiation,
+		maxUDPPayloadSize:         maxUDPPayloadSize,
 		onClose:                   onClose,
 	}
 	if acceptEarly {
@@ -853,6 +857,7 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		qlogTrace,
 		s.logger,
 		hdr.Version,
+		s.maxUDPPayloadSize,
 	)
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.

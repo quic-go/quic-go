@@ -4,10 +4,12 @@ package udp
 
 import (
 	"net"
+
+	"github.com/quic-go/quic-go/internal/protocol"
 )
 
-func newConn(c net.PacketConn, supportsDF bool) (*basicConn, error) {
-	return &basicConn{PacketConn: c, supportsDF: supportsDF}, nil
+func newConn(c net.PacketConn, supportsDF bool, maxPacketSize protocol.ByteCount) (*basicConn, error) {
+	return &basicConn{PacketConn: c, supportsDF: supportsDF, maxPacketSize: maxPacketSize}, nil
 }
 
 // The OpenBSD kernel rejects socket buffer sizes larger than SB_MAX (2 MB, see sys/sys/socketvar.h)

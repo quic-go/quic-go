@@ -34,7 +34,7 @@ func listenUDP(t *testing.T, network string, ip net.IP) Conn {
 	t.Cleanup(func() { c.Close() })
 	// fail the test instead of blocking it if a packet is lost
 	require.NoError(t, c.SetReadDeadline(time.Now().Add(5*time.Second)))
-	conn, err := Wrap(c)
+	conn, err := Wrap(c, protocol.MaxPacketBufferSize)
 	require.NoError(t, err)
 	return conn
 }
@@ -91,13 +91,13 @@ func (c *packetConn) SetWriteBuffer(n int) error {
 
 func TestWrapPacketConn(t *testing.T) {
 	pc := &packetConn{PacketConn: newUDPConnLocalhost(t)}
-	conn, err := Wrap(pc)
+	conn, err := Wrap(pc, protocol.MaxPacketBufferSize)
 	require.NoError(t, err)
 	require.Equal(t, desiredBufferSize, pc.ReadBuffer)
 	require.Equal(t, desiredBufferSize, pc.WriteBuffer)
 	require.Equal(t, Capabilities{}, conn.Capabilities())
 	// a Conn is used as is
-	wrapped, err := Wrap(conn.(net.PacketConn))
+	wrapped, err := Wrap(conn.(net.PacketConn), protocol.MaxPacketBufferSize)
 	require.NoError(t, err)
 	require.Same(t, conn, wrapped)
 
@@ -113,6 +113,40 @@ var _ syscall.Conn = &faultySyscallConn{}
 func (c *faultySyscallConn) SyscallConn() (syscall.RawConn, error) { return nil, assert.AnError }
 
 func TestWrapSyscallConnError(t *testing.T) {
-	_, err := Wrap(&faultySyscallConn{PacketConn: newUDPConnLocalhost(t)})
+	_, err := Wrap(&faultySyscallConn{PacketConn: newUDPConnLocalhost(t)}, protocol.MaxPacketBufferSize)
 	require.ErrorIs(t, err, assert.AnError)
+}
+
+func TestReadPacketMaxPacketSize(t *testing.T) {
+	const maxPacketSize = 1232
+
+	// uses batched reads on platforms that support it
+	udpConn := newUDPConnLocalhost(t)
+	conn, err := Wrap(udpConn, maxPacketSize)
+	require.NoError(t, err)
+	// reads packets one by one
+	basic, err := Wrap(&packetConn{PacketConn: newUDPConnLocalhost(t)}, maxPacketSize)
+	require.NoError(t, err)
+
+	for _, c := range []Conn{conn, basic} {
+		sender := newUDPConnLocalhost(t)
+		_, err = sender.WriteTo(make([]byte, maxPacketSize), c.LocalAddr())
+		require.NoError(t, err)
+		p, err := c.ReadPacket()
+		require.NoError(t, err)
+		require.Len(t, p.Data, maxPacketSize)
+		p.Buffer.Release()
+
+		// Packets that exceed the limit are truncated. Windows returns an error instead.
+		_, err = sender.WriteTo(make([]byte, maxPacketSize+1), c.LocalAddr())
+		require.NoError(t, err)
+		p, err = c.ReadPacket()
+		if runtime.GOOS == "windows" {
+			require.True(t, IsRecvMsgSizeErr(err))
+			continue
+		}
+		require.NoError(t, err)
+		require.Len(t, p.Data, maxPacketSize)
+		p.Buffer.Release()
+	}
 }
