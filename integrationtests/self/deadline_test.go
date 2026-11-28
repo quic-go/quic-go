@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -14,15 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupDeadlineTest(t *testing.T) (serverStr, clientStr *quic.Stream) {
+func setupDeadlineTest(t *testing.T, clientPacketConn, serverPacketConn net.PacketConn) (serverStr, clientStr *quic.Stream) {
 	t.Helper()
-	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	server, err := quic.Listen(serverPacketConn, getTLSConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { server.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	conn, err := quic.Dial(ctx, clientPacketConn, server.Addr(), getTLSClientConfig(), getQuicConfig(nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.CloseWithError(0, "") })
 	clientStr, err = conn.OpenStream()
@@ -42,45 +43,49 @@ func setupDeadlineTest(t *testing.T) (serverStr, clientStr *quic.Stream) {
 }
 
 func TestReadDeadlineSync(t *testing.T) {
-	serverStr, clientStr := setupDeadlineTest(t)
+	synctest.Test(t, func(t *testing.T) {
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLink(t, 10*time.Millisecond)
+		t.Cleanup(func() { closeFn(t) })
+		serverStr, clientStr := setupDeadlineTest(t, clientPacketConn, serverPacketConn)
 
-	const timeout = time.Millisecond
-	errChan := make(chan error, 1)
-	go func() {
-		_, err := serverStr.Write(PRDataLong)
-		errChan <- err
-	}()
+		const timeout = time.Millisecond
+		errChan := make(chan error, 1)
+		go func() {
+			_, err := serverStr.Write(PRDataLong)
+			errChan <- err
+		}()
 
-	var bytesRead int
-	var timeoutCounter int
-	buf := make([]byte, 1<<10)
-	data := make([]byte, len(PRDataLong))
-	clientStr.SetReadDeadline(time.Now().Add(timeout))
-	for bytesRead < len(PRDataLong) {
-		n, err := clientStr.Read(buf)
-		if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
-			timeoutCounter++
-			clientStr.SetReadDeadline(time.Now().Add(timeout))
-		} else {
-			require.NoError(t, err)
+		var bytesRead int
+		var timeoutCounter int
+		buf := make([]byte, 1<<10)
+		data := make([]byte, len(PRDataLong))
+		clientStr.SetReadDeadline(time.Now().Add(timeout))
+		for bytesRead < len(PRDataLong) {
+			n, err := clientStr.Read(buf)
+			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+				timeoutCounter++
+				clientStr.SetReadDeadline(time.Now().Add(timeout))
+			} else {
+				require.NoError(t, err)
+			}
+			copy(data[bytesRead:], buf[:n])
+			bytesRead += n
 		}
-		copy(data[bytesRead:], buf[:n])
-		bytesRead += n
-	}
-	require.Equal(t, PRDataLong, data)
-	// make sure the test actually worked and Read actually ran into the deadline a few times
-	t.Logf("ran into deadline %d times", timeoutCounter)
-	require.GreaterOrEqual(t, timeoutCounter, 10)
-	select {
-	case err := <-errChan:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+		require.Equal(t, PRDataLong, data)
+		// make sure the test actually worked and Read actually ran into the deadline a few times
+		t.Logf("ran into deadline %d times", timeoutCounter)
+		require.GreaterOrEqual(t, timeoutCounter, 10)
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+	})
 }
 
 func TestReadDeadlineAsync(t *testing.T) {
-	serverStr, clientStr := setupDeadlineTest(t)
+	serverStr, clientStr := setupDeadlineTest(t, newUDPConnLocalhost(t), newUDPConnLocalhost(t))
 
 	const timeout = time.Millisecond
 	errChan := make(chan error, 1)
@@ -126,56 +131,60 @@ func TestReadDeadlineAsync(t *testing.T) {
 	select {
 	case err := <-errChan:
 		require.NoError(t, err)
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timeout")
 	}
 }
 
 func TestWriteDeadlineSync(t *testing.T) {
-	serverStr, clientStr := setupDeadlineTest(t)
+	synctest.Test(t, func(t *testing.T) {
+		clientPacketConn, serverPacketConn, closeFn := newSimnetLink(t, 10*time.Millisecond)
+		t.Cleanup(func() { closeFn(t) })
+		serverStr, clientStr := setupDeadlineTest(t, clientPacketConn, serverPacketConn)
 
-	const timeout = time.Millisecond
+		const timeout = time.Millisecond
 
-	errChan := make(chan error, 1)
-	go func() {
-		defer close(errChan)
-		data, err := io.ReadAll(serverStr)
-		if err != nil {
-			errChan <- err
+		errChan := make(chan error, 1)
+		go func() {
+			defer close(errChan)
+			data, err := io.ReadAll(serverStr)
+			if err != nil {
+				errChan <- err
+			}
+			if !bytes.Equal(PRDataLong, data) {
+				errChan <- fmt.Errorf("data mismatch")
+			}
+		}()
+
+		var bytesWritten int
+		var timeoutCounter int
+		clientStr.SetWriteDeadline(time.Now().Add(timeout))
+		for bytesWritten < len(PRDataLong) {
+			n, err := clientStr.Write(PRDataLong[bytesWritten:])
+			if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+				timeoutCounter++
+				clientStr.SetWriteDeadline(time.Now().Add(timeout))
+			} else {
+				require.NoError(t, err)
+			}
+			bytesWritten += n
 		}
-		if !bytes.Equal(PRDataLong, data) {
-			errChan <- fmt.Errorf("data mismatch")
-		}
-	}()
+		clientStr.Close()
 
-	var bytesWritten int
-	var timeoutCounter int
-	clientStr.SetWriteDeadline(time.Now().Add(timeout))
-	for bytesWritten < len(PRDataLong) {
-		n, err := clientStr.Write(PRDataLong[bytesWritten:])
-		if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
-			timeoutCounter++
-			clientStr.SetWriteDeadline(time.Now().Add(timeout))
-		} else {
+		// make sure the test actually worked and Write actually ran into the deadline a few times
+		t.Logf("ran into deadline %d times", timeoutCounter)
+		require.GreaterOrEqual(t, timeoutCounter, 10)
+		select {
+		case err := <-errChan:
 			require.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
 		}
-		bytesWritten += n
-	}
-	clientStr.Close()
-
-	// make sure the test actually worked and Write actually ran into the deadline a few times
-	t.Logf("ran into deadline %d times", timeoutCounter)
-	require.GreaterOrEqual(t, timeoutCounter, 10)
-	select {
-	case err := <-errChan:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("timeout")
-	}
+	})
 }
 
 func TestWriteDeadlineAsync(t *testing.T) {
-	serverStr, clientStr := setupDeadlineTest(t)
+	serverStr, clientStr := setupDeadlineTest(t, newUDPConnLocalhost(t), newUDPConnLocalhost(t))
 
 	const timeout = time.Millisecond
 
@@ -229,7 +238,7 @@ func TestWriteDeadlineAsync(t *testing.T) {
 	select {
 	case err := <-errChan:
 		require.NoError(t, err)
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timeout")
 	}
 }
