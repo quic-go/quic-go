@@ -187,6 +187,102 @@ func TestStreamCreditRelease(t *testing.T) {
 	})
 }
 
+func TestSetMaxIncomingStreams(t *testing.T) {
+	ln, err := quic.Listen(
+		newUDPConnLocalhost(t),
+		getTLSConfig(),
+		getQuicConfig(&quic.Config{MaxIncomingStreams: 1, MaxIncomingUniStreams: 1}),
+	)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	client, err := quic.Dial(ctx, newUDPConnLocalhost(t), ln.Addr(), getTLSClientConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer client.CloseWithError(0, "")
+
+	server, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	defer server.CloseWithError(0, "")
+
+	t.Run("unidirectional", func(t *testing.T) {
+		testSetMaxIncomingStreams(t,
+			server.SetMaxIncomingUniStreams,
+			func(ctx context.Context) (io.WriteCloser, error) { return client.OpenUniStreamSync(ctx) },
+			func(ctx context.Context) error {
+				str, err := server.AcceptUniStream(ctx)
+				if err != nil {
+					return err
+				}
+				_, err = io.ReadAll(str)
+				return err
+			},
+		)
+	})
+
+	t.Run("bidirectional", func(t *testing.T) {
+		testSetMaxIncomingStreams(t,
+			server.SetMaxIncomingStreams,
+			func(ctx context.Context) (io.WriteCloser, error) { return client.OpenStreamSync(ctx) },
+			func(ctx context.Context) error {
+				str, err := server.AcceptStream(ctx)
+				if err != nil {
+					return err
+				}
+				if _, err := io.ReadAll(str); err != nil {
+					return err
+				}
+				return str.Close()
+			},
+		)
+	})
+}
+
+func testSetMaxIncomingStreams(t *testing.T,
+	setMaxIncomingStreams func(int64),
+	openStream func(context.Context) (io.WriteCloser, error),
+	acceptAndCompleteStream func(context.Context) error,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	open := func(ctx context.Context) error {
+		str, err := openStream(ctx)
+		if err != nil {
+			return err
+		}
+		if _, err := str.Write([]byte("foobar")); err != nil {
+			return err
+		}
+		return str.Close()
+	}
+	requireBlocked := func() {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(ctx, scaleDuration(50*time.Millisecond))
+		defer cancel()
+		require.ErrorIs(t, open(ctx), context.DeadlineExceeded)
+	}
+
+	require.NoError(t, open(ctx))
+	requireBlocked()
+
+	// increasing the limit allows the peer to open new streams immediately
+	setMaxIncomingStreams(3)
+	require.NoError(t, open(ctx))
+	require.NoError(t, open(ctx))
+	requireBlocked()
+
+	// after decreasing the limit, the peer can only open a new stream
+	// once the number of streams has dropped below the new limit
+	setMaxIncomingStreams(1)
+	require.NoError(t, acceptAndCompleteStream(ctx))
+	require.NoError(t, acceptAndCompleteStream(ctx))
+	requireBlocked()
+	require.NoError(t, acceptAndCompleteStream(ctx))
+	require.NoError(t, open(ctx))
+}
+
 func TestBidirectionalStreamMultiplexing(t *testing.T) {
 	const numStreams = 75
 

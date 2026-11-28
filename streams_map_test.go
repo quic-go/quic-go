@@ -250,6 +250,27 @@ func testStreamsMapStreamCreditRelease(t *testing.T,
 	require.Equal(t, []wire.Frame{&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 101}}, frameQueue)
 }
 
+func TestStreamsMapSetMaxIncomingStreams(t *testing.T) {
+	var frameQueue []wire.Frame
+	m := newStreamsMap(
+		context.Background(),
+		NewMockStreamSender(gomock.NewController(t)),
+		func(frame wire.Frame) { frameQueue = append(frameQueue, frame) },
+		newTestStreamFlowController,
+		10,
+		20,
+		false,
+		protocol.PerspectiveServer,
+	)
+
+	m.SetMaxIncomingStreams(15)
+	m.SetMaxIncomingUniStreams(25)
+	require.Equal(t, []wire.Frame{
+		&wire.MaxStreamsFrame{Type: protocol.StreamTypeBidi, MaxStreamNum: 15},
+		&wire.MaxStreamsFrame{Type: protocol.StreamTypeUni, MaxStreamNum: 25},
+	}, frameQueue)
+}
+
 func TestStreamsMapStreamLimits(t *testing.T) {
 	t.Run("client", func(t *testing.T) {
 		testStreamsMapStreamLimits(t, protocol.PerspectiveClient)
@@ -661,6 +682,7 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 		protocol.PerspectiveClient,
 	)
 
+	m.SetMaxIncomingUniStreams(2)
 	m.ResetFor0RTT()
 	_, err := m.OpenStream()
 	require.ErrorIs(t, err, Err0RTTRejected)
@@ -673,6 +695,9 @@ func TestStreamsMap0RTTRejection(t *testing.T) {
 
 	// make sure that we can still get new streams, as the server might be sending us data
 	require.NoError(t, m.HandleStreamFrame(&wire.StreamFrame{StreamID: 3}, monotime.Now()))
+	// the stream limit was reset to the configured value
+	err = m.HandleStreamFrame(&wire.StreamFrame{StreamID: 7}, monotime.Now())
+	require.ErrorIs(t, err, &qerr.TransportError{ErrorCode: qerr.StreamLimitError})
 
 	// now switch to using the new streams map
 	m.UseResetMaps()

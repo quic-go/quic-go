@@ -197,6 +197,18 @@ func (m *streamsMap) ReleaseStreamCredit(id protocol.StreamID) {
 	}
 }
 
+func (m *streamsMap) SetMaxIncomingStreams(n uint64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.incomingBidiStreams.SetMaxStreams(n)
+}
+
+func (m *streamsMap) SetMaxIncomingUniStreams(n uint64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.incomingUniStreams.SetMaxStreams(n)
+}
+
 func (m *streamsMap) HandleMaxStreamsFrame(f *wire.MaxStreamsFrame) {
 	switch f.Type {
 	case protocol.StreamTypeUni:
